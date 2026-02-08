@@ -944,6 +944,8 @@ function teed_up_get_handicap_index($user_id)
 // ============================================
 
 add_action('after_switch_theme', 'teed_up_create_pages');
+add_action('admin_init', 'teed_up_check_pages_created');
+
 function teed_up_create_pages()
 {
     // Define pages to create
@@ -985,6 +987,7 @@ function teed_up_create_pages()
         ]
     ];
 
+    $created_count = 0;
     foreach ($pages as $page_data) {
         // Check if page already exists
         $existing = get_page_by_path($page_data['slug']);
@@ -1002,7 +1005,40 @@ function teed_up_create_pages()
             // Set the page template
             if ($page_id && !is_wp_error($page_id)) {
                 update_post_meta($page_id, '_wp_page_template', $page_data['template']);
+                $created_count++;
             }
         }
+    }
+
+    // Mark that pages have been created
+    if ($created_count > 0) {
+        update_option('teed_up_pages_created', true);
+    }
+}
+
+/**
+ * Check if pages need to be created (for existing installations)
+ */
+function teed_up_check_pages_created()
+{
+    // If pages haven't been created yet, create them
+    if (!get_option('teed_up_pages_created')) {
+        teed_up_create_pages();
+    }
+}
+
+/**
+ * Admin notice to inform about page creation
+ */
+add_action('admin_notices', 'teed_up_pages_notice');
+function teed_up_pages_notice()
+{
+    if (get_transient('teed_up_pages_just_created')) {
+?>
+<div class="notice notice-success is-dismissible">
+    <p><strong>Round Up:</strong> Required pages have been automatically created!</p>
+</div>
+<?php
+        delete_transient('teed_up_pages_just_created');
     }
 }
