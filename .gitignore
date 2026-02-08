@@ -1,0 +1,94 @@
+# WordPress Core
+/wp-admin/
+/wp-includes/
+/wp-*.php
+/xmlrpc.php
+/readme.html
+/license.txt
+
+# WordPress Config
+wp-config.php
+wp-config-sample.php
+
+# Database exports
+*.sql
+*.sql.gz
+
+# Deployment files
+/manual-deployment/
+/cpanel-deployment-*/
+/cpanel-migration/
+*.tar.gz
+*.zip
+export-database.sh
+prepare-files.sh
+deploy-*.sh
+import_courses.sh
+
+# Docker
+docker-compose.yml
+.dockerignore
+
+# Environment files
+.env
+.env.*
+
+# Logs
+*.log
+error_log
+debug.log
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Node modules (if using build tools)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Composer
+/vendor/
+
+# WordPress uploads (optional - uncomment if you don't want to track uploads)
+# /wp-content/uploads/
+
+# WordPress plugins (track only custom plugins)
+/wp-content/plugins/*
+!/wp-content/plugins/teed-up-*/
+!/wp-content/plugins/.gitkeep
+
+# WordPress themes (track only custom theme)
+/wp-content/themes/*
+!/wp-content/themes/teed-up-migration/
+!/wp-content/themes/.gitkeep
+
+# WordPress cache
+/wp-content/cache/
+/wp-content/advanced-cache.php
+/wp-content/wp-cache-config.php
+
+# WordPress upgrade
+/wp-content/upgrade/
+/wp-content/backup-db/
+/wp-content/backups/
+
+# Migration guides (keep these)
+!MIGRATION-QUICKSTART.md
+!cpanel-setup-guide.md
+!update-urls.sql
