@@ -871,7 +871,7 @@ function teed_up_handle_registration()
     $username = sanitize_user($_POST['email']);
     $email = sanitize_email($_POST['email']);
     $password = $_POST['password'];
-    $fullname = sanitize_text_field($_POST['fullname']);
+    $fullname = isset($_POST['fullname']) ? sanitize_text_field($_POST['fullname']) : '';
     $plan = isset($_POST['membership_plan']) ? sanitize_text_field($_POST['membership_plan']) : 'free';
 
     // Validation
@@ -1034,7 +1034,7 @@ function teed_up_handle_profile_update()
         exit;
     }
 
-    $fullname = sanitize_text_field($_POST['fullname']);
+    $fullname = isset($_POST['fullname']) ? sanitize_text_field($_POST['fullname']) : '';
     $email = sanitize_email($_POST['email']);
     $current_password = $_POST['current_password'];
     $new_password = $_POST['new_password'];
