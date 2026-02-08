@@ -39,22 +39,16 @@ Check that these links work:
 
 - **Advanced Custom Fields (ACF)** is required for data storage.
 
-### 5. Create ACF Field Groups
+### 5. Import ACF Field Groups (Fast Way)
 
-*If you haven't already done this, you need to set up the data fields:*
+Instead of creating fields manually, you can now import them in seconds:
 
-#### Field Group: Round Details
+1. In WordPress Admin, go to **ACF → Tools**.
+2. Under "Import Field Groups", click **"Choose File"**.
+3. Select the `teed-up-acf-export.json` file from the theme root.
+4. Click **"Import JSON"**.
 
-**Location:** Post Type is equal to Round
-
-**Fields:**
-- **Course** (Post Object)
-  - Return Format: Post Object
-- **Date** (Date Picker)
-  - Return Format: `Y-m-d`
-- **Score** (Number)
-- **Holes Played** (Number, Default: 18)
-- **Hole Scores** (Repeater or Text)
+*🎉 All fields for Rounds and Courses are now set up!*
 
 ---
 

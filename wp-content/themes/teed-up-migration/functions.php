@@ -854,29 +854,107 @@ function teed_up_enqueue_scripts()
 
 // Handle Custom Registration
 add_action('admin_post_nopriv_teed_up_register_user', 'teed_up_handle_registration');
+add_action('admin_post_teed_up_register_user', 'teed_up_handle_registration'); // Also for logged in if needed
+
 function teed_up_handle_registration()
 {
-    if (isset($_POST['email'])) {
-        $username = sanitize_user($_POST['email']);
-        $email = sanitize_email($_POST['email']);
-        $password = $_POST['password'];
-        $fullname = sanitize_text_field($_POST['fullname']);
-
-        $user_id = wp_create_user($username, $password, $email);
-
-        if (is_wp_error($user_id)) {
-            wp_redirect(site_url('/login?registration=failed'));
-            exit;
-        }
-
-        update_user_meta($user_id, 'first_name', $fullname);
-        wp_set_current_user($user_id);
-        wp_set_auth_cookie($user_id);
-
-        wp_redirect(site_url('/dashboard'));
+    if (!isset($_POST['registration_nonce']) || !wp_verify_nonce($_POST['registration_nonce'], 'teed_up_user_registration')) {
+        wp_redirect(site_url('/login?registration=failed&reason=security_check'));
         exit;
     }
+
+    if (!isset($_POST['email']) || !isset($_POST['password'])) {
+        wp_redirect(site_url('/login?registration=failed&reason=missing_fields'));
+        exit;
+    }
+
+    $username = sanitize_user($_POST['email']);
+    $email = sanitize_email($_POST['email']);
+    $password = $_POST['password'];
+    $fullname = sanitize_text_field($_POST['fullname']);
+    $plan = isset($_POST['membership_plan']) ? sanitize_text_field($_POST['membership_plan']) : 'free';
+
+    // Validation
+    if (!is_email($email)) {
+        wp_redirect(site_url('/login?registration=failed&reason=invalid_email'));
+        exit;
+    }
+
+    if (email_exists($email)) {
+        wp_redirect(site_url('/login?registration=failed&reason=email_exists'));
+        exit;
+    }
+
+    // Create User
+    $user_id = wp_create_user($username, $password, $email);
+
+    if (is_wp_error($user_id)) {
+        wp_redirect(site_url('/login?registration=failed&reason=' . urlencode($user_id->get_error_message())));
+        exit;
+    }
+
+    // Update Meta
+    update_user_meta($user_id, 'first_name', $fullname);
+    update_user_meta($user_id, 'membership_plan', $plan);
+
+    // WooCommerce Customer Integration
+    if (class_exists('WooCommerce')) {
+        // Ensure user is marked as a customer
+        $user = new WP_User($user_id);
+        $user->add_role('customer');
+
+        // You could also auto-populate billing info here if collected
+        update_user_meta($user_id, 'billing_first_name', $fullname);
+        update_user_meta($user_id, 'billing_email', $email);
+    }
+
+    // Auto Login
+    wp_set_current_user($user_id);
+    wp_set_auth_cookie($user_id);
+
+    wp_redirect(site_url('/dashboard?registration=success'));
+    exit;
 }
+
+/**
+ * Ensure Membership Products exist in WooCommerce
+ */
+function teed_up_sync_membership_products()
+{
+    if (!class_exists('WooCommerce'))
+        return;
+
+    $plans = teed_up_get_membership_plans();
+
+    foreach ($plans as $key => $data) {
+        if ($key === 'free')
+            continue; // Don't need a product for free plan usually
+
+        $product_id = get_option("teed_up_product_id_{$key}");
+
+        if (!$product_id || !get_post($product_id)) {
+            $new_product_id = wp_insert_post([
+                'post_title' => "Membership: " . $data['name'],
+                'post_content' => implode(', ', $data['features']),
+                'post_status' => 'publish',
+                'post_type' => 'product',
+            ]);
+
+            if ($new_product_id) {
+                update_option("teed_up_product_id_{$key}", $new_product_id);
+
+                // Set WC Product Data
+                wp_set_object_terms($new_product_id, 'simple', 'product_type');
+                update_post_meta($new_product_id, '_regular_price', $data['price']);
+                update_post_meta($new_product_id, '_price', $data['price']);
+                update_post_meta($new_product_id, '_virtual', 'yes');
+                update_post_meta($new_product_id, '_downloadable', 'no');
+                update_post_meta($new_product_id, '_membership_plan_key', $key);
+            }
+        }
+    }
+}
+add_action('init', 'teed_up_sync_membership_products');
 
 /**
  * Calculate USGA Handicap Index
@@ -937,6 +1015,57 @@ function teed_up_get_handicap_index($user_id)
     $average = array_sum($subset) / count($subset);
 
     return number_format($average, 1);
+}
+
+/**
+ * Handle Profile Update from Dashboard
+ */
+add_action('admin_post_teed_up_update_profile', 'teed_up_handle_profile_update');
+function teed_up_handle_profile_update()
+{
+    $user_id = get_current_user_id();
+    if (!$user_id) {
+        wp_redirect(site_url('/login'));
+        exit;
+    }
+
+    if (!isset($_POST['profile_nonce']) || !wp_verify_nonce($_POST['profile_nonce'], 'teed_up_update_profile')) {
+        wp_redirect(site_url('/dashboard?profile_update=failed&reason=security_check'));
+        exit;
+    }
+
+    $fullname = sanitize_text_field($_POST['fullname']);
+    $email = sanitize_email($_POST['email']);
+    $current_password = $_POST['current_password'];
+    $new_password = $_POST['new_password'];
+
+    $user = get_userdata($user_id);
+
+    // Update Email and Name
+    $user_data = [
+        'ID' => $user_id,
+        'user_email' => $email,
+        'first_name' => $fullname
+    ];
+
+    // Password Update
+    if (!empty($new_password)) {
+        if (!wp_check_password($current_password, $user->user_pass, $user_id)) {
+            wp_redirect(site_url('/dashboard?profile_update=failed&reason=incorrect_password'));
+            exit;
+        }
+        $user_data['user_pass'] = $new_password;
+    }
+
+    $updated_user_id = wp_update_user($user_data);
+
+    if (is_wp_error($updated_user_id)) {
+        wp_redirect(site_url('/dashboard?profile_update=failed&reason=' . urlencode($updated_user_id->get_error_message())));
+    }
+    else {
+        wp_redirect(site_url('/dashboard?profile_update=success'));
+    }
+    exit;
 }
 
 // ============================================
@@ -1041,5 +1170,119 @@ function teed_up_pages_notice()
 </div>
 <?php
         delete_transient('teed_up_pages_just_created');
+    }
+}
+
+// ============================================
+// MEMBERSHIP SYSTEM
+// ============================================
+
+/**
+ * Define membership plans
+ */
+function teed_up_get_membership_plans()
+{
+    return [
+        'free' => [
+            'name' => 'Free',
+            'price' => 0,
+            'features' => ['Basic Tracking', 'Social Profile'],
+        ],
+        'scratch' => [
+            'name' => 'Scratch',
+            'price' => 0,
+            'features' => ['Advanced Analytics', 'Unlimited Rounds', 'Priority Support'],
+        ],
+        'pro' => [
+            'name' => 'Pro',
+            'price' => 0,
+            'features' => ['Coach Connectivity', 'Tournament Hosting', 'Insights+'],
+        ],
+    ];
+}
+
+/**
+ * Get user's current plan
+ */
+function teed_up_get_user_plan($user_id)
+{
+    $plan = get_user_meta($user_id, 'membership_plan', true);
+    return $plan ?: 'free';
+}
+
+/**
+ * Add custom columns to User list
+ */
+add_filter('manage_users_columns', 'teed_up_add_user_plan_column');
+function teed_up_add_user_plan_column($columns)
+{
+    $columns['membership_plan'] = 'Plan';
+    return $columns;
+}
+
+/**
+ * Display plan in User list
+ */
+add_filter('manage_users_custom_column', 'teed_up_show_user_plan_column', 10, 3);
+function teed_up_show_user_plan_column($output, $column_name, $user_id)
+{
+    if ($column_name === 'membership_plan') {
+        $plan_key = teed_up_get_user_plan($user_id);
+        $plans = teed_up_get_membership_plans();
+        $plan_name = isset($plans[$plan_key]) ? $plans[$plan_key]['name'] : 'Free';
+
+        $color = '#666';
+        if ($plan_key === 'scratch')
+            $color = '#2271b1';
+        if ($plan_key === 'pro')
+            $color = '#d63638';
+
+        return '<span style="color:' . $color . '; font-weight:bold;">' . esc_html($plan_name) . '</span>';
+    }
+    return $output;
+}
+
+/**
+ * Add plan field to user profile
+ */
+add_action('show_user_profile', 'teed_up_user_plan_fields');
+add_action('edit_user_profile', 'teed_up_user_plan_fields');
+function teed_up_user_plan_fields($user)
+{
+    $current_plan = teed_up_get_user_plan($user->ID);
+    $plans = teed_up_get_membership_plans();
+?>
+<h3>Membership Information</h3>
+<table class="form-table">
+    <tr>
+        <th><label for="membership_plan">Current Plan</label></th>
+        <td>
+            <select name="membership_plan" id="membership_plan">
+                <?php foreach ($plans as $key => $plan): ?>
+                <option value="<?php echo esc_attr($key); ?>" <?php selected($current_plan, $key); ?>>
+                    <?php echo esc_html($plan['name']); ?>
+                </option>
+                <?php
+    endforeach; ?>
+            </select>
+        </td>
+    </tr>
+</table>
+<?php
+}
+
+/**
+ * Save plan field from user profile
+ */
+add_action('personal_options_update', 'teed_up_save_user_plan_fields');
+add_action('edit_user_profile_update', 'teed_up_save_user_plan_fields');
+function teed_up_save_user_plan_fields($user_id)
+{
+    if (!current_user_can('edit_user', $user_id)) {
+        return false;
+    }
+
+    if (isset($_POST['membership_plan'])) {
+        update_user_meta($user_id, 'membership_plan', sanitize_text_field($_POST['membership_plan']));
     }
 }
