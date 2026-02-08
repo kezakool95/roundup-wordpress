@@ -8,20 +8,10 @@
                 "label": "Course",
                 "name": "course",
                 "type": "post_object",
-                "instructions": "",
                 "required": 1,
-                "conditional_logic": 0,
-                "wrapper": {
-                    "width": "",
-                    "class": "",
-                    "id": ""
-                },
                 "post_type": [
                     "course"
                 ],
-                "taxonomy": "",
-                "allow_null": 0,
-                "multiple": 0,
                 "return_format": "object",
                 "ui": 1
             },
@@ -30,14 +20,7 @@
                 "label": "Date",
                 "name": "date",
                 "type": "date_picker",
-                "instructions": "",
                 "required": 1,
-                "conditional_logic": 0,
-                "wrapper": {
-                    "width": "50",
-                    "class": "",
-                    "id": ""
-                },
                 "display_format": "d/m/Y",
                 "return_format": "Y-m-d",
                 "first_day": 1
@@ -47,20 +30,8 @@
                 "label": "Score",
                 "name": "score",
                 "type": "number",
-                "instructions": "",
                 "required": 1,
-                "conditional_logic": 0,
-                "wrapper": {
-                    "width": "25",
-                    "class": "",
-                    "id": ""
-                },
-                "default_value": "",
-                "placeholder": "",
-                "prepend": "",
-                "append": "",
                 "min": 1,
-                "max": "",
                 "step": 1
             },
             {
@@ -68,18 +39,8 @@
                 "label": "Holes Played",
                 "name": "holes_played",
                 "type": "number",
-                "instructions": "",
                 "required": 1,
-                "conditional_logic": 0,
-                "wrapper": {
-                    "width": "25",
-                    "class": "",
-                    "id": ""
-                },
                 "default_value": 18,
-                "placeholder": "",
-                "prepend": "",
-                "append": "",
                 "min": 1,
                 "max": 18,
                 "step": 1
@@ -89,21 +50,7 @@
                 "label": "Hole Scores",
                 "name": "hole_scores",
                 "type": "text",
-                "instructions": "Stored as a JSON or serialized array of scores.",
-                "required": 0,
-                "conditional_logic": 0,
-                "wrapper": {
-                    "width": "",
-                    "class": "",
-                    "id": ""
-                },
-                "default_value": "",
-                "placeholder": "",
-                "prepend": "",
-                "append": "",
-                "maxlength": "",
-                "readonly": 0,
-                "disabled": 0
+                "instructions": "JSON array of scores (e.g., [4,5,3...])"
             }
         ],
         "location": [
@@ -113,83 +60,95 @@
                     "operator": "==",
                     "value": "round"
                 }
+            ],
+            [
+                {
+                    "param": "post_type",
+                    "operator": "==",
+                    "value": "practice_session"
+                }
             ]
         ],
-        "menu_order": 0,
-        "position": "normal",
-        "style": "default",
-        "label_placement": "top",
-        "instruction_placement": "label",
-        "hide_on_screen": "",
-        "active": true,
-        "description": ""
+        "active": true
     },
     {
         "key": "group_course_details",
         "title": "Course Details",
         "fields": [
             {
+                "key": "field_course_location",
+                "label": "Location",
+                "name": "location",
+                "type": "text",
+                "required": 1
+            },
+            {
                 "key": "field_course_par",
                 "label": "Par",
                 "name": "par",
                 "type": "number",
-                "instructions": "Standard par for the course (e.g., 72)",
                 "required": 1,
-                "conditional_logic": 0,
-                "wrapper": {
-                    "width": "33",
-                    "class": "",
-                    "id": ""
-                },
-                "default_value": 72,
-                "placeholder": "",
-                "prepend": "",
-                "append": "",
-                "min": 0,
-                "max": "",
-                "step": 1
+                "default_value": 72
             },
             {
-                "key": "field_course_slope_rating",
-                "label": "Slope Rating",
-                "name": "slope_rating",
+                "key": "field_course_rating_num",
+                "label": "Rating",
+                "name": "rating",
                 "type": "number",
-                "instructions": "Usually between 55 and 155",
                 "required": 1,
-                "conditional_logic": 0,
-                "wrapper": {
-                    "width": "33",
-                    "class": "",
-                    "id": ""
-                },
-                "default_value": 113,
-                "placeholder": "",
-                "prepend": "",
-                "append": "",
-                "min": 55,
-                "max": 155,
-                "step": 1
-            },
-            {
-                "key": "field_course_rating",
-                "label": "Course Rating",
-                "name": "course_rating",
-                "type": "number",
-                "instructions": "Numerical value (e.g., 72.0)",
-                "required": 1,
-                "conditional_logic": 0,
-                "wrapper": {
-                    "width": "33",
-                    "class": "",
-                    "id": ""
-                },
-                "default_value": 72,
-                "placeholder": "",
-                "prepend": "",
-                "append": "",
-                "min": 0,
-                "max": "",
+                "default_value": 72.0,
                 "step": "0.1"
+            },
+            {
+                "key": "field_course_slope_num",
+                "label": "Slope",
+                "name": "slope",
+                "type": "number",
+                "required": 1,
+                "default_value": 113
+            },
+            {
+                "key": "field_course_holes_count",
+                "label": "Holes",
+                "name": "holes",
+                "type": "number",
+                "required": 1,
+                "default_value": 18
+            },
+            {
+                "key": "field_course_booking_url",
+                "label": "Booking URL",
+                "name": "booking_url",
+                "type": "url"
+            },
+            {
+                "key": "field_course_ext_image",
+                "label": "External Image URL",
+                "name": "external_image_url",
+                "type": "url"
+            },
+            {
+                "key": "field_course_img_source",
+                "label": "Image Source URL",
+                "name": "image_source_url",
+                "type": "url"
+            },
+            {
+                "key": "field_course_pars_per_hole",
+                "label": "Pars Per Hole",
+                "name": "pars_per_hole",
+                "type": "repeater",
+                "sub_fields": [
+                    {
+                        "key": "field_hole_par",
+                        "label": "Par",
+                        "name": "par",
+                        "type": "number",
+                        "required": 1,
+                        "default_value": 4
+                    }
+                ],
+                "layout": "table"
             }
         ],
         "location": [
@@ -201,13 +160,81 @@
                 }
             ]
         ],
-        "menu_order": 0,
-        "position": "normal",
-        "style": "default",
-        "label_placement": "top",
-        "instruction_placement": "label",
-        "hide_on_screen": "",
-        "active": true,
-        "description": ""
+        "active": true
+    },
+    {
+        "key": "group_user_stats",
+        "title": "User Profile Fields",
+        "fields": [
+            {
+                "key": "field_user_handicap",
+                "label": "Current Handicap",
+                "name": "current_handicap",
+                "type": "number",
+                "step": "0.1"
+            },
+            {
+                "key": "field_user_handicap_trend",
+                "label": "Handicap Trend",
+                "name": "handicap_trend",
+                "type": "select",
+                "choices": {
+                    "stable": "Stable",
+                    "up": "Trending Up",
+                    "down": "Trending Down"
+                },
+                "default_value": "stable"
+            },
+            {
+                "key": "field_user_schedule",
+                "label": "Weekly Schedule",
+                "name": "weekly_schedule",
+                "type": "repeater",
+                "sub_fields": [
+                    {
+                        "key": "field_slot_day",
+                        "label": "Day",
+                        "name": "day",
+                        "type": "select",
+                        "choices": {
+                            "Mon": "Monday",
+                            "Tue": "Tuesday",
+                            "Wed": "Wednesday",
+                            "Thu": "Thursday",
+                            "Fri": "Friday",
+                            "Sat": "Saturday",
+                            "Sun": "Sunday"
+                        }
+                    },
+                    {
+                        "key": "field_slot_start",
+                        "label": "Start Time",
+                        "name": "start_time",
+                        "type": "time_picker",
+                        "display_format": "H:i",
+                        "return_format": "H:i"
+                    },
+                    {
+                        "key": "field_slot_end",
+                        "label": "End Time",
+                        "name": "end_time",
+                        "type": "time_picker",
+                        "display_format": "H:i",
+                        "return_format": "H:i"
+                    }
+                ],
+                "layout": "table"
+            }
+        ],
+        "location": [
+            [
+                {
+                    "param": "user_role",
+                    "operator": "==",
+                    "value": "all"
+                }
+            ]
+        ],
+        "active": true
     }
 ]
