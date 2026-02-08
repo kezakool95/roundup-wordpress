@@ -944,7 +944,7 @@ function teed_up_get_handicap_index($user_id)
 // ============================================
 
 add_action('after_switch_theme', 'teed_up_create_pages');
-add_action('admin_init', 'teed_up_check_pages_created');
+add_action('init', 'teed_up_check_pages_created');
 
 function teed_up_create_pages()
 {
@@ -1010,9 +1010,10 @@ function teed_up_create_pages()
         }
     }
 
-    // Mark that pages have been created
-    if ($created_count > 0) {
+    // Mark that pages have been created and flush rules
+    if ($created_count > 0 || !get_option('teed_up_pages_created')) {
         update_option('teed_up_pages_created', true);
+        flush_rewrite_rules();
     }
 }
 

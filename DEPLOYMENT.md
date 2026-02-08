@@ -3,7 +3,7 @@
 ## ✅ Successfully Pushed to GitHub!
 
 Repository: `kezakool95/roundup-wordpress`
-Commit: `f89eb2f` - Fixes critical error & adds auto-pages
+Commit: `[latest]` - Fixes critical error & adds auto-pages
 
 ---
 
@@ -19,29 +19,21 @@ cd ~/roundup.lakehouse.holdings
 git pull origin main
 ```
 
-### 2. Activate Changes & Fix Pages
+### 2. That's it! 
 
-Since your theme is **already active**, you must do this:
-
-1. **Log in to WordPress Admin** (`/wp-admin`)
-   - This triggers the automatic page creation script.
-   - You should see a green notice: "Round Up: Required pages have been automatically created!"
-
-2. **Flush Permalinks** (Fixes 404 Errors)
-   - Go to **Settings → Permalinks**
-   - Scroll down and click **"Save Changes"** (no need to change anything)
-   - This fixes any "Page Not Found" errors on `/friends/`, `/leaderboards/`, etc.
+Just visit your website homepage.
+- The theme will **automatically detect** missing pages and create them.
+- It will **automatically fix** any 404 errors by flushing permalinks.
+- No need to log in to admin or do anything manual!
 
 ### 3. Verify Pages Exist
 
-Check **Pages → All Pages** to ensure these exist:
-- Dashboard (`/dashboard`)
-- Log Round (`/log-round`)
-- Stats (`/stats`)
-- Friends (`/friends`)
-- Leaderboards (`/leaderboards`)
-- Login (`/login`)
-- Rounds (`/rounds`)
+Check that these links work:
+- [Dashboard](/dashboard)
+- [Log Round](/log-round) (requires login)
+- [Stats](/stats)
+- [Friends](/friends)
+- [Leaderboards](/leaderboards)
 
 ### 4. Install Required Plugins (If not already)
 
@@ -49,56 +41,30 @@ Check **Pages → All Pages** to ensure these exist:
 
 ### 5. Create ACF Field Groups
 
+*If you haven't already done this, you need to set up the data fields:*
+
 #### Field Group: Round Details
 
 **Location:** Post Type is equal to Round
 
 **Fields:**
 - **Course** (Post Object)
-  - Post Type: `course`
   - Return Format: Post Object
-  
 - **Date** (Date Picker)
-  - Display Format: `d/m/Y`
   - Return Format: `Y-m-d`
-  
 - **Score** (Number)
-  - Min: 1
-  
-- **Holes Played** (Number)
-  - Default: 18
-  - Choices: 9, 18
-  
-- **Hole Scores** (Text)
-  - Instructions: "JSON array of hole scores"
-
-#### Field Group: Course Details
-
-**Location:** Post Type is equal to Course
-
-**Fields:**
-- **Par** (Number)
-  - Default: 72
-  
-- **Slope Rating** (Number)
-  - Default: 113
-  
-- **Course Rating** (Number)
-  - Default: 72.0
+- **Holes Played** (Number, Default: 18)
+- **Hole Scores** (Repeater or Text)
 
 ---
 
 ## 🐛 Troubleshooting
 
-### "Critical Error" on `/friends/`?
-- I have fixed the PHP syntax error in `page-friends.php`. A `git pull` will resolve this.
+### "Critical Error"?
+- Run `git pull` again to ensure you have the latest fix for `page-friends.php`.
 
-### Pages returning 404?
-- Visit **Settings → Permalinks** and click **Save Changes**.
-
-### API returning 404?
-- Check if `mod_rewrite` is enabled on server (usually is).
-- Visit Permalinks settings to flush rewrite rules.
+### Pages still 404?
+- If automatic fixing didn't work, just visit **Settings → Permalinks** in wp-admin and click **"Save Changes"**.
 
 ---
 
