@@ -77,10 +77,10 @@ $labels_array = array_reverse($labels_array);
         new Chart(ctx, {
             type: 'line',
             data: {
-                labels: <? php echo json_encode($labels_array); ??,
+                labels: <? php echo json_encode($labels_array); ?>,
             datasets: [{
                 label: 'Score',
-                data: <? php echo json_encode($scores_array); ??,
+                data: <? php echo json_encode($scores_array); ?>,
                 borderColor: '#0B3D17',
                 borderWidth: 3,
                 tension: 0.4,
