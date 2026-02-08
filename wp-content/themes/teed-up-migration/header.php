@@ -26,6 +26,7 @@
                 <a href="<?php echo site_url('/rounds'); ?>" class="nav-link">Rounds</a>
                 <a href="<?php echo site_url('/friends'); ?>" class="nav-link">Friends</a>
                 <a href="<?php echo site_url('/stats'); ?>" class="nav-link">Stats</a>
+                <a href="<?php echo site_url('/leaderboards'); ?>" class="nav-link">Leaderboards</a>
                 <a href="<?php echo site_url('/my-schedule'); ?>" class="nav-link">Schedule</a>
                 <a href="<?php echo wp_logout_url(home_url()); ?>" class="btn-secondary small">Sign Out</a>
                 <?php
@@ -54,6 +55,7 @@ endif; ?>
                 <a href="<?php echo site_url('/rounds'); ?>" class="mobile-link">Rounds</a>
                 <a href="<?php echo site_url('/friends'); ?>" class="mobile-link">Friends</a>
                 <a href="<?php echo site_url('/stats'); ?>" class="mobile-link">Stats</a>
+                <a href="<?php echo site_url('/leaderboards'); ?>" class="mobile-link">Leaderboards</a>
                 <a href="<?php echo site_url('/schedule'); ?>" class="mobile-link">Schedule</a>
                 <a href="<?php echo wp_logout_url(home_url()); ?>" class="mobile-link highlight">Sign Out</a>
                 <?php
