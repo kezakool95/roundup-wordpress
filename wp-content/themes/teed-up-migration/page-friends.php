@@ -210,7 +210,7 @@ $search = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
                 })
                     .then(res => res.json())
                     .then(data => {
-                        const currentUserId = <? php echo get_current_user_id(); ?>;
+                        const currentUserId = <?php echo get_current_user_id(); ?>;
                         const friendIds = this.friends.map(f => f.id);
                         const sentIds = this.pendingSent.map(f => f.id);
 

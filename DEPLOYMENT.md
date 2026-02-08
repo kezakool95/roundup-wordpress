@@ -3,7 +3,7 @@
 ## ✅ Successfully Pushed to GitHub!
 
 Repository: `kezakool95/roundup-wordpress`
-Commit: `5447bbb` - All core features implemented
+Commit: `f89eb2f` - Fixes critical error & adds auto-pages
 
 ---
 
@@ -19,32 +19,35 @@ cd ~/roundup.lakehouse.holdings
 git pull origin main
 ```
 
-### 2. Activate the Theme
+### 2. Activate Changes & Fix Pages
 
-1. Log into WordPress admin: `https://roundup.lakehouse.holdings/wp-admin`
-2. Go to **Appearance → Themes**
-3. Activate **"Teed Up Migration"**
+Since your theme is **already active**, you must do this:
 
-**🎉 Pages Auto-Created!**
+1. **Log in to WordPress Admin** (`/wp-admin`)
+   - This triggers the automatic page creation script.
+   - You should see a green notice: "Round Up: Required pages have been automatically created!"
 
-When you activate the theme, these pages are automatically created:
-- `/dashboard` - User dashboard
-- `/log-round` - Round creator
-- `/stats` - Stats dashboard
-- `/friends` - Friend finder
-- `/leaderboards` - Leaderboards
-- `/login` - Login page
-- `/rounds` - Rounds archive
+2. **Flush Permalinks** (Fixes 404 Errors)
+   - Go to **Settings → Permalinks**
+   - Scroll down and click **"Save Changes"** (no need to change anything)
+   - This fixes any "Page Not Found" errors on `/friends/`, `/leaderboards/`, etc.
 
-### 3. Install Required Plugins
+### 3. Verify Pages Exist
 
-Install **Advanced Custom Fields (ACF)** plugin:
+Check **Pages → All Pages** to ensure these exist:
+- Dashboard (`/dashboard`)
+- Log Round (`/log-round`)
+- Stats (`/stats`)
+- Friends (`/friends`)
+- Leaderboards (`/leaderboards`)
+- Login (`/login`)
+- Rounds (`/rounds`)
 
-1. Go to **Plugins → Add New**
-2. Search for "Advanced Custom Fields"
-3. Install and activate **Advanced Custom Fields** (free version is fine)
+### 4. Install Required Plugins (If not already)
 
-### 4. Create ACF Field Groups
+- **Advanced Custom Fields (ACF)** is required for data storage.
+
+### 5. Create ACF Field Groups
 
 #### Field Group: Round Details
 
@@ -83,110 +86,20 @@ Install **Advanced Custom Fields (ACF)** plugin:
 - **Course Rating** (Number)
   - Default: 72.0
 
-### 5. Install Alpine.js & Chart.js (Already in Theme)
-
-The theme already enqueues these from CDN in `functions.php`:
-- Alpine.js v3
-- Chart.js v4
-
-### 6. Test the Application
-
-1. **Create a test user** (Subscriber role)
-2. **Log in** and visit `/dashboard`
-3. **Log a round** at `/log-round`
-4. **Check stats** at `/stats`
-5. **View leaderboards** at `/leaderboards`
-6. **Add friends** at `/friends`
-
----
-
-## 🔧 Database Notes
-
-All data is stored using WordPress native functions:
-- **Rounds** → Custom Post Type `round`
-- **Friends** → User Meta (`friends_list`, `friend_requests_sent`, `friend_requests_received`)
-- **Handicap History** → User Meta (`handicap_history`, `current_handicap`)
-- **Club Distances** → User Meta (`club_distances`)
-
-**No custom SQL tables required!**
-
----
-
-## 🎯 REST API Endpoints
-
-All endpoints are automatically registered. Test with:
-
-```bash
-# Get leaderboard
-curl https://roundup.lakehouse.holdings/wp-json/teedup/v1/leaderboard?type=global
-
-# Get user stats (requires authentication)
-curl https://roundup.lakehouse.holdings/wp-json/teedup/v1/user-stats \
-  -H "X-WP-Nonce: YOUR_NONCE"
-```
-
----
-
-## 📱 Mobile Responsiveness
-
-All pages are fully responsive and tested on:
-- Desktop (1920px+)
-- Tablet (768px - 1024px)
-- Mobile (320px - 767px)
-
 ---
 
 ## 🐛 Troubleshooting
 
-### Pages not showing?
-- Flush permalinks: **Settings → Permalinks → Save Changes**
+### "Critical Error" on `/friends/`?
+- I have fixed the PHP syntax error in `page-friends.php`. A `git pull` will resolve this.
 
-### REST API not working?
-- Check `.htaccess` has WordPress rewrite rules
-- Verify REST API is enabled: Visit `/wp-json/` (should show JSON)
+### Pages returning 404?
+- Visit **Settings → Permalinks** and click **Save Changes**.
 
-### Charts not displaying?
-- Check browser console for JavaScript errors
-- Verify Chart.js is loading from CDN
-
-### Friend requests not working?
-- Ensure users are logged in
-- Check browser console for API errors
+### API returning 404?
+- Check if `mod_rewrite` is enabled on server (usually is).
+- Visit Permalinks settings to flush rewrite rules.
 
 ---
 
-## 🎨 Customization
-
-### Change Colors
-
-Edit `style.css` CSS variables:
-
-```css
-:root {
-    --primary: #0B3D17;  /* Forest Green */
-    --accent: #4CAF50;   /* Vibrant Lime */
-    --background: #F4F7F5;
-}
-```
-
-### Add More Stats
-
-Edit `functions.php` → `teed_up_get_user_stats()` function
-
----
-
-## ✅ Deployment Checklist
-
-- [ ] Pull latest code from GitHub
-- [ ] Activate "Teed Up Migration" theme
-- [ ] Install ACF plugin
-- [ ] Create ACF field groups for rounds and courses
-- [ ] Flush permalinks
-- [ ] Test round submission
-- [ ] Test friend system
-- [ ] Test leaderboards
-- [ ] Test on mobile device
-
----
-
-**🎉 Your golf app is ready to go!**
+**🎉 Your golf app is ready!**
