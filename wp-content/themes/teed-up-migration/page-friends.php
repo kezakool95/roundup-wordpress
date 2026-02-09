@@ -23,6 +23,9 @@ $search = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
             📩 Requests <span x-show="pendingReceived.length" class="badge alert"
                 x-text="pendingReceived.length"></span>
         </button>
+        <button class="tab-btn" :class="{'active': activeTab === 'availability'}" @click="activeTab = 'availability'">
+            📅 Availability
+        </button>
         <button class="tab-btn" :class="{'active': activeTab === 'search'}" @click="activeTab = 'search'">
             🔍 Find Golfers
         </button>
@@ -56,9 +59,14 @@ $search = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
                     <div class="friend-info">
                         <h3 x-text="friend.name"></h3>
                         <p class="text-muted">Handicap: <strong x-text="friend.handicap"></strong></p>
+                        <p class="text-muted">Handicap: <strong x-text="friend.handicap"></strong></p>
                         <div class="friend-actions">
+                            <button @click="openHistory(friend)" class="btn-secondary small">History</button>
                             <a :href="'/leaderboards/?type=friends'" class="btn-secondary small">Compare</a>
                             <button @click="removeFriend(friend.id)" class="btn-danger small">Remove</button>
+                        </div>
+                        <div class="mt-1">
+                            <button @click="quickBook(friend.id)" class="btn-primary small full-width">Book Next Round</button>
                         </div>
                     </div>
                 </div>
@@ -112,6 +120,64 @@ $search = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
         </template>
     </div>
 
+    <!-- Availability Tab -->
+    <div x-show="activeTab === 'availability'" x-transition>
+        <template x-if="loadingAvailability">
+            <div class="loading-state glass-card text-center">
+                <div class="spinner"></div>
+                <p>Checking everyone's schedules...</p>
+            </div>
+        </template>
+
+        <template x-if="!loadingAvailability && friendAvailability.length === 0">
+            <div class="empty-state glass-card text-center">
+                <div class="empty-icon">📅</div>
+                <h3>No availability data</h3>
+                <p class="text-muted">Connect with friends to see when they are playing!</p>
+            </div>
+        </template>
+
+        <div class="availability-dashboard">
+            <template x-for="friend in friendAvailability" :key="friend.id">
+                <div class="availability-row glass-card slide-up mb-1">
+                    <div class="user-brief">
+                        <img :src="friend.avatar" class="mini-avatar">
+                        <h4 x-text="friend.name"></h4>
+                    </div>
+                    
+                    <div class="day-slots">
+                        <div class="day-group">
+                            <span class="day-label">Today</span>
+                            <div class="slot-chips">
+                                <template x-for="slot in friend.availability.today">
+                                    <span class="slot-chip-v2" x-text="slot"></span>
+                                </template>
+                                <template x-if="friend.availability.today.length === 0">
+                                    <span class="no-slots text-muted">Unavailable</span>
+                                </template>
+                            </div>
+                        </div>
+                        <div class="day-group">
+                            <span class="day-label">Tomorrow</span>
+                            <div class="slot-chips">
+                                <template x-for="slot in friend.availability.tomorrow">
+                                    <span class="slot-chip-v2" x-text="slot"></span>
+                                </template>
+                                <template x-if="friend.availability.tomorrow.length === 0">
+                                    <span class="no-slots text-muted">Unavailable</span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row-actions">
+                        <button @click="quickBook(friend.id)" class="btn-primary small">Book Round</button>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
     <!-- Search Tab -->
     <div x-show="activeTab === 'search'" x-transition>
         <div class="search-bar glass-card mb-2">
@@ -155,6 +221,45 @@ $search = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
             </div>
         </template>
     </div>
+
+    <!-- Friend History Modal -->
+    <div class="modal-wrapper" x-show="showHistoryModal" style="display: none;">
+        <div class="modal-backdrop" @click="showHistoryModal = false" x-transition.opacity></div>
+        <div class="modal-dialog glass-card" x-transition:enter="transition ease-out duration-300">
+            <div class="modal-header">
+                <h3>History with <span x-text="selectedFriend?.name"></span></h3>
+                <button @click="showHistoryModal = false" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <template x-if="loadingHistory">
+                    <div class="text-center p-2"><div class="spinner"></div></div>
+                </template>
+                <template x-if="!loadingHistory && friendHistory.length === 0">
+                    <div class="text-center p-2">
+                        <p class="text-muted">No rounds played together yet.</p>
+                        <button @click="quickBook(selectedFriend.id)" class="btn-primary mt-1">Book First Round</button>
+                    </div>
+                </template>
+                <div class="history-list" x-show="!loadingHistory && friendHistory.length > 0">
+                    <template x-for="round in friendHistory" :key="round.id">
+                        <div class="history-item flex-between p-1 border-bottom">
+                            <div>
+                                <strong x-text="round.course"></strong>
+                                <div class="text-muted small" x-text="round.date"></div>
+                            </div>
+                            <div class="flex gap-1 align-center">
+                                <span class="badge" x-text="round.score || '-'"></span>
+                                <a :href="'/log-round?round_id=' + round.id" class="btn-secondary small">View</a>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <div class="mt-2 text-center" x-show="!loadingHistory">
+                    <button @click="quickBook(selectedFriend.id)" class="btn-primary full-width">Book Next Round</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -169,10 +274,37 @@ $search = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
             pendingReceived: [],
             pendingSent: [],
             searchResults: [],
+            friendAvailability: [],
+            loadingAvailability: false,
+            searchResults: [],
+            friendAvailability: [],
+            loadingAvailability: false,
             toast: { show: false, message: '', type: 'success' },
+            showHistoryModal: false,
+            selectedFriend: null,
+            friendHistory: [],
+            loadingHistory: false,
 
             init() {
                 this.loadFriends();
+                this.loadAvailability();
+            },
+
+            loadAvailability() {
+                this.loadingAvailability = true;
+                fetch('/wp-json/teedup/v1/friends/availability', {
+                    headers: { 'X-WP-Nonce': '<?php echo wp_create_nonce('wp_rest'); ?>' }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    this.friendAvailability = data.friends || [];
+                    this.loadingAvailability = false;
+                });
+            },
+
+            quickBook(friendId) {
+                // Redirect to round creator with friend pre-selected
+                window.location.href = `/log-round?partner=${friendId}&intent=book`;
             },
 
             showToast(message, type = 'success') {
@@ -277,7 +409,7 @@ $search = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
                     headers: {
                         'Content-Type': 'application/json',
                         'X-WP-Nonce': '<?php echo wp_create_nonce('wp_rest'); ?>'
-                },
+                    },
                     body: JSON.stringify({ friend_id: friendId })
                 })
                     .then(res => res.json())
@@ -287,6 +419,22 @@ $search = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
                             this.loadFriends();
                         }
                     });
+            },
+
+            openHistory(friend) {
+                this.selectedFriend = friend;
+                this.showHistoryModal = true;
+                this.loadingHistory = true;
+                this.friendHistory = [];
+
+                fetch(`/wp-json/teedup/v1/friends/history?friend_id=${friend.id}`, {
+                    headers: { 'X-WP-Nonce': '<?php echo wp_create_nonce('wp_rest'); ?>' }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    this.friendHistory = data.history || [];
+                    this.loadingHistory = false;
+                });
             }
         }
     }
@@ -483,9 +631,72 @@ $search = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
         }
     }
 
-    .empty-icon {
-        font-size: 4rem;
-        margin-bottom: 1rem;
+/* Availability Dashboard */
+    .availability-row {
+        display: grid;
+        grid-template-columns: 150px 1fr 120px;
+        align-items: center;
+        padding: 1rem 1.5rem;
+        gap: 1.5rem;
+    }
+
+    @media (max-width: 600px) {
+        .availability-row {
+            grid-template-columns: 1fr;
+            text-align: center;
+        }
+        .user-brief { flex-direction: column; }
+    }
+
+    .user-brief {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .mini-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 2px solid var(--primary);
+    }
+
+    .day-slots {
+        display: flex;
+        gap: 2rem;
+    }
+
+    .day-group {
+        flex: 1;
+    }
+
+    .day-label {
+        display: block;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--text-muted);
+        margin-bottom: 0.4rem;
+    }
+
+    .slot-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+
+    .slot-chip-v2 {
+        font-size: 0.75rem;
+        background: #f0fdf4;
+        color: #166534;
+        padding: 0.2rem 0.6rem;
+        border-radius: 6px;
+        border: 1px solid #bbf7d0;
+        font-weight: 600;
+    }
+
+    .no-slots {
+        font-size: 0.8rem;
     }
 </style>
 

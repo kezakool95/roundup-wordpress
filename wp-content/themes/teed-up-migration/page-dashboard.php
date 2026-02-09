@@ -80,6 +80,53 @@ endif; ?>
             </div>
         </div>
 
+        <!-- Booking Requests -->
+        <template x-if="bookings.received.length > 0">
+            <div class="mt-4 slide-up">
+                <h2 class="premium-heading mb-1">Booking Requests</h2>
+                <div class="grid-2">
+                    <template x-for="booking in bookings.received" :key="booking.id">
+                        <div class="glass-card p-1-5 flex-between">
+                            <div>
+                                <h4 x-text="booking.course"></h4>
+                                <p class="text-muted small">
+                                    <span x-text="booking.creator"></span> invited you • <span x-text="new Date(booking.date).toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'numeric'})"></span>
+                                </p>
+                            </div>
+                            <div class="flex gap-0-5" x-show="booking.my_status === 'pending'">
+                                <button class="btn-primary small" @click="respondToBooking(booking.id, 'accepted')">Accept</button>
+                                <button class="btn-secondary small" @click="respondToBooking(booking.id, 'declined')">Decline</button>
+                            </div>
+                            <div x-show="booking.my_status !== 'pending'">
+                                <span class="badge" :class="booking.my_status" x-text="booking.my_status.charAt(0).toUpperCase() + booking.my_status.slice(1)"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
+
+        <!-- Upcoming Rounds -->
+        <template x-if="bookings.sent.length > 0 || bookings.received.filter(b => b.my_status === 'accepted').length > 0">
+            <div class="mt-4 slide-up">
+                <h2 class="premium-heading mb-1">Upcoming Rounds</h2>
+                <div class="glass-card overflow-hidden">
+                    <template x-for="round in [...bookings.sent, ...bookings.received.filter(b => b.my_status === 'accepted')]" :key="round.id">
+                        <div class="activity-item">
+                            <div class="activity-icon">📅</div>
+                            <div class="activity-details">
+                                <strong x-text="round.course"></strong>
+                                <span class="text-muted" x-text="new Date(round.date).toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'numeric'})"></span>
+                            </div>
+                            <div>
+                                <a :href="'<?php echo site_url('/log-round'); ?>?round_id=' + round.id" class="btn-primary small">Add Scores</a>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
+
         <!-- Recent Activity -->
         <div class="recent-activity mt-4 slide-up" style="animation-delay: 0.5s;">
             <div class="flex-between mb-1">
@@ -159,20 +206,19 @@ elseif ($plan_key === 'pro')
 ?>
                         </div>
                         <div class="tier-details">
-                            <span class="tier-label <?php echo esc_attr($plan_key); ?>">
-                                <?php echo esc_html($current_plan['name']); ?>
+                            <span class="tier-label <?php echo $current_plan['class']; ?>">
+                                <?php echo $current_plan['name']; ?> Tier
                             </span>
-                            <div class="tier-status">Active Subscription</div>
+                            <div class="tier-status"><?php echo ucfirst($plan_status); ?> Subscription</div>
                         </div>
                     </div>
                     <div class="membership-features">
                         <ul class="benefit-list-v2">
-                            <?php foreach (array_slice($current_plan['features'], 0, 3) as $feature): ?>
+                            <?php foreach ($current_plan['features'] as $feature): ?>
                             <li><span class="dot">•</span>
                                 <?php echo esc_html($feature); ?>
                             </li>
-                            <?php
-endforeach; ?>
+                            <?php endforeach; ?>
                         </ul>
                     </div>
                     <div class="membership-action">
@@ -188,6 +234,19 @@ endforeach; ?>
         <div class="profile-settings-grid grid-2 mt-2">
             <!-- Account Details Card -->
             <div class="glass-card profile-card slide-up">
+                <?php
+                // Get Membership Status from Meta
+                $plan_key = get_user_meta($user_id, 'subscription_plan', true) ?: 'free';
+                $plan_status = get_user_meta($user_id, 'subscription_status', true) ?: 'active';
+                
+                // Define Plans
+                $available_plans = [
+                    'free' => ['name' => 'Free', 'class' => 'free', 'price' => '0', 'period' => 'forever', 'features' => ['Basic Handicap', 'Standard Booking', 'Community Access']],
+                    'scratch' => ['name' => 'Scratch', 'class' => 'scratch', 'price' => '9', 'period' => '/mo', 'features' => ['Official Handicap', 'Advanced Stats', 'Priority Booking']],
+                    'pro' => ['name' => 'Pro', 'class' => 'pro', 'price' => '19', 'period' => '/mo', 'features' => ['All Scratch Features', 'Pro Shop Discounts', 'Event Access']]
+                ];
+                $current_plan = $available_plans[$plan_key] ?? $available_plans['free'];
+                ?>
                 <div class="mb-2">
                     <h2 class="premium-heading">Account Settings</h2>
                     <p class="text-muted">Manage your personal information and email.</p>
@@ -284,47 +343,35 @@ endif; ?>
             </div>
             <div class="modal-body">
                 <div class="plan-options-grid">
-                    <?php foreach ($plans as $key => $plan):
-    $is_current = ($key === $plan_key);
-?>
-                    <div class="plan-option-v2 <?php echo $key; ?> <?php echo $is_current ? 'is-current' : ''; ?>"
-                        @click="updatePlan('<?php echo $key; ?>')">
-                        <?php if ($is_current): ?><span class="active-tag">Current Plan</span>
-                        <?php
-    endif; ?>
+                    <?php foreach ($available_plans as $key => $plan): 
+                        $is_current = ($key === $plan_key);
+                    ?>
+                    <div class="plan-option-v2 <?php echo $is_current ? 'is-current' : ''; ?>" 
+                         @click="<?php echo !$is_current ? "updatePlan('$key')" : ''; ?>">
+                        <?php if ($is_current): ?>
+                        <div class="active-tag">CURRENT PLAN</div>
+                        <?php endif; ?>
+                        
                         <div class="option-header">
-                            <span class="option-icon">
-                                <?php
-    if ($key === 'free')
-        echo '⛳️';
-    elseif ($key === 'scratch')
-        echo '🚀';
-    elseif ($key === 'pro')
-        echo '🏆';
-?>
-                            </span>
-                            <h4>
-                                <?php echo esc_html($plan['name']); ?>
-                            </h4>
-                            <div class="option-price">$
-                                <?php echo esc_html($plan['price']); ?><span>/mo</span>
-                            </div>
+                            <div class="option-icon"><?php echo $key === 'pro' ? '🏆' : ($key === 'scratch' ? '⛳' : '🏌️‍♂️'); ?></div>
+                            <h4><?php echo $plan['name']; ?></h4>
+                        </div>
+                        <div class="option-price">
+                            $<?php echo $plan['price']; ?><span><?php echo $plan['period']; ?></span>
                         </div>
                         <ul class="option-features">
                             <?php foreach ($plan['features'] as $feature): ?>
                             <li>
                                 <?php echo esc_html($feature); ?>
                             </li>
-                            <?php
-    endforeach; ?>
+                            <?php endforeach; ?>
                         </ul>
                         <button class="btn-select-plan <?php echo $is_current ? 'current' : ''; ?>"
                             :disabled="<?php echo $is_current ? 'true' : 'false'; ?>">
                             <?php echo $is_current ? 'Active' : 'Select ' . $plan['name']; ?>
                         </button>
                     </div>
-                    <?php
-endforeach; ?>
+                    <?php endforeach; ?>
                 </div>
             </div>
         </div>
@@ -368,10 +415,60 @@ endforeach; ?>
                 duration: 60,
                 notes: ''
             },
+            bookings: { sent: [], received: [] },
+            
+            init() {
+                this.loadBookings();
+            },
+
+            loadBookings() {
+                fetch('/wp-json/teedup/v1/booking/list', {
+                    headers: { 'X-WP-Nonce': '<?php echo wp_create_nonce('wp_rest'); ?>' }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    this.bookings = data;
+                });
+            },
+
+            respondToBooking(roundId, response) {
+                fetch('/wp-json/teedup/v1/booking/respond', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': '<?php echo wp_create_nonce('wp_rest'); ?>'
+                    },
+                    body: JSON.stringify({ round_id: roundId, response: response })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        this.loadBookings();
+                    } else {
+                        alert(data.message || 'Error responding to booking.');
+                    }
+                });
+            },
             updatePlan(planKey) {
-                // Placeholder for plan update functionality
-                alert('Upgrading to ' + planKey + ' plan! This will be integrated with a payment provider in the next phase.');
-                this.showPlanModal = false;
+                if (!confirm('Are you sure you want to switch to the ' + planKey + ' plan?')) return;
+
+                fetch('/wp-json/teedup/v1/subscription/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': '<?php echo wp_create_nonce('wp_rest'); ?>'
+                    },
+                    body: JSON.stringify({ plan: planKey })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                        location.reload();
+                    } else {
+                        alert(data.message || 'Error updating plan');
+                    }
+                });
             },
             submitPractice() {
                 this.submitting = true;
@@ -619,6 +716,10 @@ endforeach; ?>
         box-shadow: var(--shadow-lg);
     }
 
+    .modal-dialog.wide-modal {
+        max-width: 1000px;
+    }
+
     .modal-header {
         display: flex;
         justify-content: space-between;
@@ -780,9 +881,27 @@ endforeach; ?>
     /* Modal Grid */
     .plan-options-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        grid-template-columns: repeat(3, 1fr);
         gap: 1.5rem;
         margin-top: 1.5rem;
+    }
+
+    @media (max-width: 992px) {
+        .plan-options-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 640px) {
+        .plan-options-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        .modal-dialog.wide-modal {
+            padding: 1.5rem;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
     }
 
     .plan-option-v2 {
@@ -791,13 +910,20 @@ endforeach; ?>
         border-radius: 20px;
         padding: 1.75rem;
         text-align: center;
-        transition: all 0.3s ease;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         cursor: pointer;
         position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     }
 
     .plan-option-v2:hover {
         background: white;
+        transform: translateY(-5px);
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
         transform: translateY(-5px);
         box-shadow: 0 15px 30px rgba(0, 0, 0, 0.05);
     }
@@ -894,6 +1020,40 @@ endforeach; ?>
 
     .plan-option-v2:not(.is-current):hover .btn-select-plan {
         filter: brightness(1.1);
+    }
+    .p-1-5 {
+        padding: 1.5rem;
+    }
+
+    .gap-0-5 {
+        gap: 0.5rem;
+    }
+
+    .flex {
+        display: flex;
+    }
+
+    .badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .badge.accepted {
+        background: #ecfdf5;
+        color: #059669;
+    }
+
+    .badge.declined {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    .badge.pending {
+        background: #fffbeb;
+        color: #d97706;
     }
 </style>
 
