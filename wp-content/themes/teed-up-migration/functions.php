@@ -117,6 +117,72 @@ function teed_up_register_rest_routes()
         return is_user_logged_in();
     }
     ]);
+
+    // Availability Route
+    register_rest_route('teedup/v1', '/availability/check', [
+        'methods' => 'POST',
+        'callback' => 'teed_up_check_availability',
+        'permission_callback' => function () {
+        return is_user_logged_in();
+    }
+    ]);
+
+    register_rest_route('teedup/v1', '/availability/save', [
+        'methods' => 'POST',
+        'callback' => 'teed_up_save_availability',
+        'permission_callback' => function () {
+        return is_user_logged_in();
+    }
+    ]);
+
+    register_rest_route('teedup/v1', '/friends/availability', [
+        'methods' => 'GET',
+        'callback' => 'teed_up_get_friends_availability',
+        'permission_callback' => function () {
+        return is_user_logged_in();
+    }
+    ]);
+
+    register_rest_route('teedup/v1', '/subscription/update', [
+        'methods' => 'POST',
+        'callback' => 'teed_up_update_subscription',
+        'permission_callback' => function () {
+        return is_user_logged_in();
+    }
+    ]);
+
+    register_rest_route('teedup/v1', '/friends/history', [
+        'methods' => 'GET',
+        'callback' => 'teed_up_get_shared_history',
+        'permission_callback' => function () {
+        return is_user_logged_in();
+    }
+    ]);
+
+    // Booking System Routes
+    register_rest_route('teedup/v1', '/booking/create', [
+        'methods' => 'POST',
+        'callback' => 'teed_up_create_booking',
+        'permission_callback' => function () {
+        return is_user_logged_in();
+    }
+    ]);
+
+    register_rest_route('teedup/v1', '/booking/respond', [
+        'methods' => 'POST',
+        'callback' => 'teed_up_respond_to_booking',
+        'permission_callback' => function () {
+        return is_user_logged_in();
+    }
+    ]);
+
+    register_rest_route('teedup/v1', '/booking/list', [
+        'methods' => 'GET',
+        'callback' => 'teed_up_get_bookings_list',
+        'permission_callback' => function () {
+        return is_user_logged_in();
+    }
+    ]);
 }
 
 /**
@@ -127,6 +193,7 @@ function teed_up_submit_round($request)
     $user_id = get_current_user_id();
     $params = $request->get_json_params();
 
+    $round_id = isset($params['round_id']) ? intval($params['round_id']) : 0;
     $course_id = intval($params['course_id']);
     $date = sanitize_text_field($params['date']);
     $holes_played = intval($params['holes_played']) ?: 18;
@@ -137,17 +204,25 @@ function teed_up_submit_round($request)
     // Get course name for title
     $course_name = get_the_title($course_id);
 
-    // Create the round post
-    $post_type = $is_practice ? 'practice_session' : 'round';
-    $round_id = wp_insert_post([
-        'post_type' => $post_type,
-        'post_title' => ($is_practice ? 'Practice: ' : 'Round at ') . $course_name,
-        'post_status' => 'publish',
-        'post_author' => $user_id,
-    ]);
+    if ($round_id) {
+        // Update existing booking/round
+        wp_update_post([
+            'ID' => $round_id,
+            'post_title' => ($is_practice ? 'Practice: ' : 'Round at ') . $course_name,
+        ]);
+    } else {
+        // Create the round post
+        $post_type = $is_practice ? 'practice_session' : 'round';
+        $round_id = wp_insert_post([
+            'post_type' => $post_type,
+            'post_title' => ($is_practice ? 'Practice: ' : 'Round at ') . $course_name,
+            'post_status' => 'publish',
+            'post_author' => $user_id,
+        ]);
+    }
 
-    if (is_wp_error($round_id)) {
-        return new WP_Error('insert_failed', 'Failed to create round', ['status' => 500]);
+    if (is_wp_error($round_id) || !$round_id) {
+        return new WP_Error('save_failed', 'Failed to save round', ['status' => 500]);
     }
 
     // Save ACF fields
@@ -156,6 +231,7 @@ function teed_up_submit_round($request)
     update_field('score', $total_score, $round_id);
     update_field('holes_played', $holes_played, $round_id);
     update_field('hole_scores', $scores, $round_id);
+    update_field('round_status', 'completed', $round_id);
 
     // Recalculate handicap if not practice
     if (!$is_practice) {
@@ -583,6 +659,169 @@ function teed_up_default_club_distances()
         ['club' => 'SW', 'distance' => 90, 'unit' => 'm'],
         ['club' => 'LW', 'distance' => 70, 'unit' => 'm'],
     ];
+}
+
+/**
+ * Check overlapping availability for multiple users
+ */
+function teed_up_check_availability($request)
+{
+    $params = $request->get_json_params();
+    $user_ids = array_map('intval', (array)($params['user_ids'] ?? []));
+    $duration_mins = intval($params['duration_mins'] ?? 150); // Default 2.5h
+    $days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    // Include current user if not in list
+    $current_user_id = get_current_user_id();
+    if (!in_array($current_user_id, $user_ids)) {
+        $user_ids[] = $current_user_id;
+    }
+
+    $all_availability = [];
+    foreach ($user_ids as $uid) {
+        $all_availability[$uid] = get_field('weekly_schedule', 'user_' . $uid) ?: [];
+    }
+
+    $matching_slots = [];
+
+    foreach ($days as $day) {
+        // Check every 30 mins from 06:00 to 18:00
+        for ($h = 6; $h <= 18; $h++) {
+            for ($m = 0; $m < 60; $m += 30) {
+                $start_time = sprintf('%02d:%02d', $h, $m);
+
+                // Check if this slot is available for ALL users
+                $all_ready = true;
+                foreach ($user_ids as $uid) {
+                    $user_ready = false;
+                    foreach ($all_availability[$uid] as $slot) {
+                        if (empty($slot['start_time']) || empty($slot['end_time'])) continue;
+                        
+                        // Normalize to HH:MM for robust comparison
+                        $slot_start = date('H:i', strtotime($slot['start_time']));
+                        $slot_end = date('H:i', strtotime($slot['end_time']));
+
+                        if ($slot['day'] === $day && $slot_start <= $start_time && $slot_end > $start_time) {
+                            $user_ready = true;
+                            break;
+                        }
+                    }
+                    if (!$user_ready) {
+                        $all_ready = false;
+                        break;
+                    }
+                }
+
+                if ($all_ready) {
+                    $matching_slots[$day][] = $start_time;
+                }
+            }
+        }
+    }
+
+    // Filter for contiguous blocks
+    $final_options = [];
+    $slots_needed = ceil($duration_mins / 30);
+
+    foreach ($matching_slots as $day => $times) {
+        if (count($times) < $slots_needed) continue;
+
+        for ($i = 0; $i <= count($times) - $slots_needed; $i++) {
+            $is_contiguous = true;
+            for ($j = 0; $j < $slots_needed - 1; $j++) {
+                $curr = strtotime('2026-01-01 ' . $times[$i + $j]);
+                $next = strtotime('2026-01-01 ' . $times[$i + $j + 1]);
+                if ($next - $curr !== 1800) { // 30 mins
+                    $is_contiguous = false;
+                    break;
+                }
+            }
+            if ($is_contiguous) {
+                $final_options[] = [
+                    'day' => $day,
+                    'time' => $times[$i],
+                    'label' => $day . ' @ ' . $times[$i]
+                ];
+            }
+        }
+    }
+
+    return [
+        'success' => true,
+        'options' => $final_options
+    ];
+}
+
+/**
+ * Save user availability schedule
+ */
+function teed_up_save_availability($request)
+{
+    $user_id = get_current_user_id();
+    $params = $request->get_json_params();
+    $new_schedule = $params['schedule'] ?? [];
+
+    // Map to ACF repeater format
+    $acf_value = [];
+    foreach ($new_schedule as $slot) {
+        $start = !empty($slot['start_time']) ? date('H:i', strtotime($slot['start_time'])) : '';
+        $end = !empty($slot['end_time']) ? date('H:i', strtotime($slot['end_time'])) : '';
+        
+        $acf_value[] = [
+            'day' => sanitize_text_field($slot['day']),
+            'start_time' => $start,
+            'end_time' => $end
+        ];
+    }
+
+    update_field('weekly_schedule', $acf_value, 'user_' . $user_id);
+
+    return ['success' => true, 'message' => 'Schedule saved successfully!'];
+}
+
+/**
+ * Get summary of friends availability for the next 48 hours
+ */
+function teed_up_get_friends_availability()
+{
+    $user_id = get_current_user_id();
+    $friends = get_user_meta($user_id, 'friends_list', true) ?: [];
+    
+    if (empty($friends)) {
+        return ['friends' => []];
+    }
+
+    $today = date('D');
+    $tomorrow = date('D', strtotime('+1 day'));
+    
+    $results = [];
+    foreach ($friends as $fid) {
+        $f_data = get_userdata($fid);
+        if (!$f_data) continue;
+
+        $schedule = get_field('weekly_schedule', 'user_' . $fid) ?: [];
+        $availability = [
+            'today' => [],
+            'tomorrow' => []
+        ];
+
+        foreach ($schedule as $slot) {
+            if ($slot['day'] === $today) {
+                $availability['today'][] = $slot['start_time'] . ' - ' . $slot['end_time'];
+            } elseif ($slot['day'] === $tomorrow) {
+                $availability['tomorrow'][] = $slot['start_time'] . ' - ' . $slot['end_time'];
+            }
+        }
+
+        $results[] = [
+            'id' => $fid,
+            'name' => $f_data->display_name,
+            'avatar' => get_avatar_url($fid),
+            'availability' => $availability
+        ];
+    }
+
+    return ['friends' => $results];
 }
 
 // Register Menus
@@ -1285,4 +1524,442 @@ function teed_up_save_user_plan_fields($user_id)
     if (isset($_POST['membership_plan'])) {
         update_user_meta($user_id, 'membership_plan', sanitize_text_field($_POST['membership_plan']));
     }
+}
+
+// ============================================
+// ADMIN ACCESS CONTROL
+// ============================================
+
+/**
+ * Restrict wp-admin access to Administrators only
+ */
+add_action('admin_init', 'teed_up_restrict_admin_access');
+function teed_up_restrict_admin_access()
+{
+    if (defined('DOING_AJAX') && DOING_AJAX) {
+        return;
+    }
+
+    if (!current_user_can('administrator')) {
+        wp_redirect(site_url('/dashboard'));
+        exit;
+    }
+}
+
+/**
+ * Hide admin bar for non-administrators
+ */
+add_filter('show_admin_bar', function($show) {
+    if (!current_user_can('administrator')) {
+        return false;
+    }
+    return $show;
+});
+
+// ============================================
+// ADMIN FRIEND MANAGEMENT
+// ============================================
+
+/**
+ * Register Manage Friendships admin page
+ */
+add_action('admin_menu', 'teed_up_register_friend_management_page');
+function teed_up_register_friend_management_page()
+{
+    add_users_page(
+        'Manage Friendships',
+        'Manage Friendships',
+        'administrator',
+        'manage-friendships',
+        'teed_up_render_friend_management_page'
+    );
+}
+
+/**
+ * Render Manage Friendships admin page
+ */
+function teed_up_render_friend_management_page()
+{
+    if (!current_user_can('administrator')) {
+        wp_die('Unauthorized access');
+    }
+
+    // Handle Actions
+    if (isset($_GET['action']) && isset($_GET['user_a']) && isset($_GET['user_b'])) {
+        $action = $_GET['action'];
+        $ua = intval($_GET['user_a']);
+        $ub = intval($_GET['user_b']);
+        $type = $_GET['meta_type'] ?? 'friends_list';
+
+        check_admin_referer('manage_friendships_action');
+
+        if ($action === 'delete') {
+            // Remove B from A
+            $list_a = get_user_meta($ua, $type, true) ?: [];
+            $list_a = array_diff($list_a, [$ub]);
+            update_user_meta($ua, $type, array_unique(array_values($list_a)));
+
+            // If it was a friendship (not just a request), remove A from B too
+            if ($type === 'friends_list') {
+                $list_b = get_user_meta($ub, 'friends_list', true) ?: [];
+                $list_b = array_diff($list_b, [$ua]);
+                update_user_meta($ub, 'friends_list', array_unique(array_values($list_b)));
+            } elseif ($type === 'friend_requests_sent') {
+                $list_b = get_user_meta($ub, 'friend_requests_received', true) ?: [];
+                $list_b = array_diff($list_b, [$ua]);
+                update_user_meta($ub, 'friend_requests_received', array_unique(array_values($list_b)));
+            }
+
+            echo '<div class="notice notice-success is-dismissible"><p>Relationship removed.</p></div>';
+        } elseif ($action === 'approve' && $type === 'friend_requests_sent') {
+            // User A sent, User B received. Approve means both are friends.
+            
+            // 1. Remove from requests
+            $sent_a = get_user_meta($ua, 'friend_requests_sent', true) ?: [];
+            update_user_meta($ua, 'friend_requests_sent', array_unique(array_values(array_diff($sent_a, [$ub]))));
+
+            $rec_b = get_user_meta($ub, 'friend_requests_received', true) ?: [];
+            update_user_meta($ub, 'friend_requests_received', array_unique(array_values(array_diff($rec_b, [$ua]))));
+
+            // 2. Add to friends_list
+            $friends_a = get_user_meta($ua, 'friends_list', true) ?: [];
+            $friends_a[] = $ub;
+            update_user_meta($ua, 'friends_list', array_unique(array_values($friends_a)));
+
+            $friends_b = get_user_meta($ub, 'friends_list', true) ?: [];
+            $friends_b[] = $ua;
+            update_user_meta($ub, 'friends_list', array_unique(array_values($friends_b)));
+
+            echo '<div class="notice notice-success is-dismissible"><p>Friend request approved!</p></div>';
+        }
+    }
+
+    // Get all users to build map
+    $users = get_users(['fields' => ['ID', 'display_name']]);
+    $user_map = [];
+    foreach ($users as $u) {
+        $user_map[$u->ID] = $u->display_name;
+    }
+
+    echo '<div class="wrap"><h1>Manage All Friendships</h1>';
+    echo '<p>View and manage all established friendships and pending requests across the platform.</p>';
+
+    echo '<table class="wp-list-table widefat fixed striped">';
+    echo '<thead><tr><th>User A</th><th>Relationship</th><th>User B</th><th>Actions</th></tr></thead>';
+    echo '<tbody>';
+
+    foreach ($users as $u) {
+        $user_id = $u->ID;
+        
+        // Established Friends
+        $friends = get_user_meta($user_id, 'friends_list', true) ?: [];
+        foreach ($friends as $fid) {
+            if ($user_id < $fid) { // Only show once per pair
+                echo '<tr>';
+                echo '<td><strong>' . esc_html($user_map[$user_id]) . '</strong></td>';
+                echo '<td><span class="dashicons dashicons-groups"></span> Friends</td>';
+                echo '<td><strong>' . esc_html($user_map[$fid] ?? 'Unknown ('.$fid.')') . '</strong></td>';
+                $del_url = wp_nonce_url(admin_url('users.php?page=manage-friendships&action=delete&user_a='.$user_id.'&user_b='.$fid.'&meta_type=friends_list'), 'manage_friendships_action');
+                echo '<td><a href="' . $del_url . '" class="button button-link-delete" onclick="return confirm(\'Are you sure you want to end this friendship?\')">End Friendship</a></td>';
+                echo '</tr>';
+            }
+        }
+
+        // Pending Requests (Sent)
+        $sent = get_user_meta($user_id, 'friend_requests_sent', true) ?: [];
+        foreach ($sent as $sid) {
+            echo '<tr>';
+            echo '<td>' . esc_html($user_map[$user_id]) . '</td>';
+            echo '<td><span class="dashicons dashicons-share-alt"></span> Pending Request</td>';
+            echo '<td>' . esc_html($user_map[$sid] ?? 'Unknown ('.$sid.')') . '</td>';
+            $del_url = wp_nonce_url(admin_url('users.php?page=manage-friendships&action=delete&user_a='.$user_id.'&user_b='.$sid.'&meta_type=friend_requests_sent'), 'manage_friendships_action');
+            $app_url = wp_nonce_url(admin_url('users.php?page=manage-friendships&action=approve&user_a='.$user_id.'&user_b='.$sid.'&meta_type=friend_requests_sent'), 'manage_friendships_action');
+            echo '<td>';
+            echo '<a href="' . $app_url . '" class="button button-primary" style="margin-right:5px;">Approve Request</a>';
+            echo '<a href="' . $del_url . '" class="button button-link-delete">Cancel Request</a>';
+            echo '</td>';
+            echo '</tr>';
+        }
+    }
+
+    echo '</tbody></table></div>';
+}
+
+/**
+ * Create a new booking (pending round)
+ */
+function teed_up_create_booking($request)
+{
+    $user_id = get_current_user_id();
+    $params = $request->get_json_params();
+
+    $course_id = intval($params['course_id']);
+    $date = sanitize_text_field($params['date']);
+    $holes_played = intval($params['holes_played'] ?: 18);
+    $invited_friends = array_map('intval', $params['invited_friends'] ?? []);
+
+    $course_name = get_the_title($course_id);
+
+    $round_id = wp_insert_post([
+        'post_type' => 'round',
+        'post_title' => 'Booking at ' . $course_name,
+        'post_status' => 'publish',
+        'post_author' => $user_id,
+    ]);
+
+    if (is_wp_error($round_id)) {
+        return new WP_Error('booking_failed', 'Failed to create booking', ['status' => 500]);
+    }
+
+    // ACF Fields
+    update_field('course', $course_id, $round_id);
+    update_field('date', $date, $round_id);
+    update_field('holes_played', $holes_played, $round_id);
+    update_field('round_status', 'pending', $round_id);
+
+    // Save invitations
+    update_post_meta($round_id, 'invited_friends', $invited_friends);
+    foreach ($invited_friends as $friend_id) {
+        update_post_meta($round_id, 'booking_status_' . $friend_id, 'pending');
+    }
+
+    return [
+        'success' => true,
+        'round_id' => $round_id,
+        'message' => 'Booking created! Invitations sent.'
+    ];
+}
+
+/**
+ * Get bookings for the current user (sent or received)
+ */
+function teed_up_get_bookings_list($request)
+{
+    $user_id = get_current_user_id();
+
+    // 1. Bookings created by user
+    $sent_args = [
+        'post_type' => 'round',
+        'author' => $user_id,
+        'posts_per_page' => -1,
+        'meta_query' => [
+            [
+                'key' => 'round_status',
+                'value' => ['pending', 'confirmed'],
+                'compare' => 'IN'
+            ]
+        ]
+    ];
+    $sent_query = new WP_Query($sent_args);
+    $sent_bookings = [];
+
+    foreach ($sent_query->posts as $post) {
+        $invited = get_post_meta($post->ID, 'invited_friends', true) ?: [];
+        $invite_details = [];
+        foreach ($invited as $fid) {
+            $invite_details[] = [
+                'user_id' => $fid,
+                'name' => get_userdata($fid)->display_name,
+                'status' => get_post_meta($post->ID, 'booking_status_' . $fid, true)
+            ];
+        }
+
+        $sent_bookings[] = [
+            'id' => $post->ID,
+            'course' => get_the_title(get_field('course', $post->ID)),
+            'date' => get_field('date', $post->ID),
+            'status' => get_field('round_status', $post->ID),
+            'invites' => $invite_details
+        ];
+    }
+
+    // 2. Bookings received by user
+    $received_args = [
+        'post_type' => 'round',
+        'posts_per_page' => -1,
+        'meta_query' => [
+            'relation' => 'AND',
+            [
+                'key' => 'invited_friends',
+                'value' => $user_id,
+                'compare' => 'LIKE' // Simplified for array storage or serialized
+            ],
+            [
+                'key' => 'round_status',
+                'value' => ['pending', 'confirmed'],
+                'compare' => 'IN'
+            ]
+        ]
+    ];
+    
+    // Actually LIKE might fail if stored as array. Better to use meta_query with value in array if supported or just filter.
+    // Let's use a more robust check for invitations
+    $all_pending = new WP_Query([
+        'post_type' => 'round',
+        'posts_per_page' => -1,
+        'meta_query' => [
+            [
+                'key' => 'round_status',
+                'value' => ['pending', 'confirmed'],
+                'compare' => 'IN'
+            ]
+        ]
+    ]);
+
+    $received_bookings = [];
+    foreach ($all_pending->posts as $post) {
+        if ($post->post_author == $user_id) continue;
+
+        $invited = get_post_meta($post->ID, 'invited_friends', true) ?: [];
+        if (in_array($user_id, $invited)) {
+            $received_bookings[] = [
+                'id' => $post->ID,
+                'creator' => get_userdata($post->post_author)->display_name,
+                'course' => get_the_title(get_field('course', $post->ID)),
+                'date' => get_field('date', $post->ID),
+                'status' => get_field('round_status', $post->ID),
+                'my_status' => get_post_meta($post->ID, 'booking_status_' . $user_id, true)
+            ];
+        }
+    }
+
+    return [
+        'success' => true,
+        'sent' => $sent_bookings,
+        'received' => $received_bookings
+    ];
+}
+
+/**
+ * Respond to a booking invitation
+ */
+function teed_up_respond_to_booking($request)
+{
+    $user_id = get_current_user_id();
+    $params = $request->get_json_params();
+
+    $round_id = intval($params['round_id']);
+    $response = sanitize_text_field($params['response']); // accepted or declined
+
+    $invited = get_post_meta($round_id, 'invited_friends', true) ?: [];
+    if (!in_array($user_id, $invited)) {
+        return new WP_Error('not_invited', 'You are not invited to this round.', ['status' => 403]);
+    }
+
+    update_post_meta($round_id, 'booking_status_' . $user_id, $response);
+
+    // If all accepted (or at least one), mark round as confirmed
+    if ($response === 'accepted') {
+        update_field('round_status', 'confirmed', $round_id);
+    }
+
+    return [
+        'success' => true,
+        'message' => 'Response recorded!'
+    ];
+}
+
+/**
+ * Update user subscription plan
+ */
+function teed_up_update_subscription($request)
+{
+    $user_id = get_current_user_id();
+    $params = $request->get_json_params();
+    $plan = sanitize_text_field($params['plan']); // 'free', 'scratch', 'pro'
+
+    if (!in_array($plan, ['free', 'scratch', 'pro'])) {
+        return new WP_Error('invalid_plan', 'Invalid subscription plan', ['status' => 400]);
+    }
+
+    // Update user meta
+    update_user_meta($user_id, 'subscription_plan', $plan);
+    update_user_meta($user_id, 'subscription_status', 'active');
+    update_user_meta($user_id, 'subscription_updated', current_time('mysql'));
+
+    // In a real scenario, this would trigger Stripe/payment logic here
+
+    return [
+        'success' => true,
+        'plan' => $plan,
+        'message' => 'Subscription updated successfully to ' . ucfirst($plan) . '!'
+    ];
+}
+
+/**
+ * Get shared history with a friend
+ */
+function teed_up_get_shared_history($request)
+{
+    $user_id = get_current_user_id();
+    $friend_id = intval($request->get_param('friend_id'));
+
+    if (!$friend_id) {
+        return new WP_Error('missing_friend', 'Friend ID required', ['status' => 400]);
+    }
+
+    // Query rounds where both users are involved
+    // This is tricky because partners are stored in meta
+    $args = [
+        'post_type' => 'round',
+        'posts_per_page' => 20,
+        'post_status' => 'publish',
+        'meta_query' => [
+            'relation' => 'AND',
+            [ // User must be author OR in partners
+                'relation' => 'OR',
+                ['key' => 'partners', 'value' => $user_id, 'compare' => 'LIKE'],
+                ['key' => 'invited_friends', 'value' => $user_id, 'compare' => 'LIKE']
+            ],
+            // And friend must be involved too... implementation simplification:
+            // easier to fetch user's rounds and filter in PHP for the friend
+        ]
+    ];
+    
+    // Better approach: Get ALL rounds for current user (author or participant) then filter 
+    // where friend was also a participant.
+    
+    // 1. Rounds where I am author
+    $my_rounds = get_posts([
+        'post_type' => 'round',
+        'author' => $user_id,
+        'posts_per_page' => 50,
+        'meta_key' => 'date',
+        'orderby' => 'meta_value',
+        'order' => 'DESC'
+    ]);
+
+    // 2. Rounds where I was a partner (requires better meta query or separate fetch)
+    // For now, let's focus on rounds user logged themselves that included the friend
+    
+    $shared_rounds = [];
+
+    foreach ($my_rounds as $post) {
+        $partners = get_field('partners', $post->ID) ?: []; // Array of User objects or IDs
+        // ACF 'partners' usually returns User Objects if formatted, or IDs. 
+        // Let's assume ID array or map it.
+        $partner_ids = [];
+        if ($partners) {
+            foreach ($partners as $p) {
+                $partner_ids[] = is_object($p) ? $p->ID : intval($p);
+            }
+        }
+        
+        // Also check 'invited_friends' for bookings
+        $invited = get_post_meta($post->ID, 'invited_friends', true) ?: [];
+        $partner_ids = array_merge($partner_ids, $invited);
+
+        if (in_array($friend_id, $partner_ids)) {
+            $course = get_field('course', $post->ID);
+            $shared_rounds[] = [
+                'id' => $post->ID,
+                'date' => get_field('date', $post->ID),
+                'course' => get_the_title($course),
+                'score' => get_field('score', $post->ID), // My score
+                'round_status' => get_field('round_status', $post->ID) ?: 'completed'
+            ];
+        }
+    }
+
+    return ['success' => true, 'history' => $shared_rounds];
 }

@@ -18,41 +18,50 @@ get_header();
         </div>
     </header>
 
-    <!-- Step 1: Mode & Holes -->
-    <div x-show="step === 1" class="step-content glass-card slide-up">
-        <h2>Round Setup</h2>
-        <div class="form-group mb-2">
-            <label class="checkbox-label">
-                <input type="checkbox" x-model="isRetrospective">
-                <span>I've already played this round (Retrospective)</span>
-            </label>
-        </div>
-        <div class="form-group mb-2">
-            <label class="checkbox-label">
-                <input type="checkbox" x-model="isPractice">
-                <span>🎯 This is a practice round (won't affect handicap)</span>
-            </label>
-        </div>
-
-        <div class="hole-selection grid-2">
-            <button class="btn-secondary large" :class="{'active': holes === 9}"
-                @click="holes = 9; initScores(); step = 2">
-                9 Holes
+    <!-- Step 1: Mode Selection -->
+    <div x-show="step === 1" class="step-content slide-up">
+        <h2 class="center mb-2">What would you like to do?</h2>
+        
+        <div class="mode-cards-grid">
+            <!-- Log Past Round -->
+            <button class="mode-action-card glass-card hover-lift" @click="isRetrospective = true; isPractice = false; holes = 18; initScores(); step = 2">
+                <div class="mode-card-icon">🏆</div>
+                <div class="card-detail">
+                    <h3>Log Past Round</h3>
+                    <p>Enter scores for a round you've already completed.</p>
+                </div>
             </button>
-            <button class="btn-secondary large" :class="{'active': holes === 18}"
-                @click="holes = 18; initScores(); step = 2">
-                18 Holes
+
+            <!-- Track Practice -->
+            <button class="mode-action-card glass-card hover-lift" @click="isRetrospective = true; isPractice = true; holes = 18; initScores(); step = 2">
+                <div class="mode-card-icon">🎯</div>
+                <div class="card-detail">
+                    <h3>Track Practice</h3>
+                    <p>Log a session that won't affect your handicap index.</p>
+                </div>
+            </button>
+
+            <!-- Book with Friends -->
+            <button class="mode-action-card glass-card hover-lift" @click="isRetrospective = false; isPractice = false; holes = 18; initScores(); step = 2">
+                <div class="mode-card-icon">👥</div>
+                <div class="card-detail">
+                    <h3>Book with Friends</h3>
+                    <p>Coordinate a future tee time based on group availability.</p>
+                </div>
             </button>
         </div>
     </div>
 
-    <!-- Step 2: Date & Course -->
+    <!-- Step 2: Date & Course & Friends -->
     <div x-show="step === 2" class="step-content glass-card slide-up">
-        <h2 x-text="isRetrospective ? 'When & Where?' : 'Set Availability'"></h2>
+        <h2 class="mb-2" x-text="isPractice ? 'Practice Details' : (isRetrospective ? 'Round Details' : 'Coordinate Tee Time')"></h2>
 
         <div class="form-group mb-2">
-            <label>Date & Time</label>
-            <input type="datetime-local" x-model="selectedDate" class="input-large">
+            <label>Length of Play</label>
+            <div class="hole-selection grid-2">
+                <button class="btn-secondary" :class="{'active': holes === 9}" @click="holes = 9; if(!isRetrospective) refreshSlots()">9 Holes</button>
+                <button class="btn-secondary" :class="{'active': holes === 18}" @click="holes = 18; if(!isRetrospective) refreshSlots()">18 Holes</button>
+            </div>
         </div>
 
         <div class="form-group mb-2">
@@ -65,11 +74,70 @@ get_header();
             </select>
         </div>
 
+        <template x-if="!isRetrospective">
+            <div class="availability-coordination">
+                <div class="form-group mb-2">
+                    <label>Play with Friends <span class="text-muted">(Optional)</span></label>
+                    <div class="friends-mini-selection">
+                        <template x-for="friend in friendList" :key="friend.id">
+                            <label class="friend-chip" :class="{'active': selectedFriendIds.includes(friend.id)}">
+                                <input type="checkbox" :value="friend.id" x-model="selectedFriendIds" @change="refreshSlots()">
+                                <img :src="friend.avatar" class="chip-avatar">
+                                <span x-text="friend.name"></span>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="form-group mb-2">
+                    <label>Select Date & Time</label>
+                    <input type="datetime-local" x-model="selectedDate" class="input-large" @change="selectedSlot = null">
+                    
+                    <div class="mt-2">
+                         <label class="text-muted small">Suggested Times (based on availability)</label>
+                         <div class="slot-picker-grid" x-show="!loadingSlots && availableSlots.length > 0">
+                            <template x-for="slot in availableSlots" :key="slot.day + slot.time">
+                                <button class="slot-btn" :class="{'active': selectedSlot === slot}" @click="selectSlot(slot)">
+                                    <span class="slot-day" x-text="slot.day"></span>
+                                    <span class="slot-time" x-text="slot.time"></span>
+                                </button>
+                            </template>
+                        </div>
+                        <p x-show="!loadingSlots && availableSlots.length === 0" class="text-muted small">No common free slots found. Please choose a custom time above.</p>
+                         <div x-show="loadingSlots" class="center p-1"><div class="spinner"></div></div>
+                    </div>
+                </div>
+
+                <div class="selected-time-summary glass-card p-1 mb-2" x-show="selectedSlot">
+                    <span>Selected from suggestions: </span>
+                    <strong x-text="selectedSlot ? selectedSlot.label : ''"></strong>
+                </div>
+            </div>
+        </template>
+
+        <template x-if="isRetrospective">
+            <div class="form-group mb-2">
+                <label>Date & Time Played</label>
+                <input type="datetime-local" x-model="selectedDate" class="input-large">
+            </div>
+        </template>
+
         <div class="grid-2 mt-2">
             <button class="btn-secondary" @click="step = 1">Back</button>
-            <button class="btn-primary" :disabled="!selectedCourseId || !selectedDate" @click="step = 3">
-                Next: Enter Scorecard
-            </button>
+            
+            <template x-if="isRetrospective">
+                <button class="btn-primary" :disabled="!selectedCourseId || !selectedDate" @click="step = 3">
+                    Next: Enter Scorecard
+                </button>
+            </template>
+            
+            <template x-if="!isRetrospective">
+                <button class="btn-primary" 
+                        :disabled="!selectedCourseId || (!selectedSlot && !showManualTime)" 
+                        @click="submitBooking()"
+                        x-text="submitting ? 'Sending...' : 'Send Invitations'">
+                </button>
+            </template>
         </div>
     </div>
 
@@ -165,9 +233,10 @@ get_header();
 <script>
     function roundCreator() {
         return {
-            step: 1,
+            step: <?php echo isset($_GET['round_id']) ? '3' : '1'; ?>,
             holes: 18,
-            isRetrospective: true,
+            isRetrospective: <?php echo (isset($_GET['round_id']) || (isset($_GET['intent']) && $_GET['intent'] === 'log')) ? 'true' : 'false'; ?>,
+            existingRoundId: <?php echo isset($_GET['round_id']) ? intval($_GET['round_id']) : '0'; ?>,
             isPractice: false,
             selectedDate: new Date().toISOString().slice(0, 16),
             selectedCourseId: '',
@@ -178,6 +247,13 @@ get_header();
             scores: Array(18).fill(null),
             submitting: false,
             newHandicap: 'NH',
+
+            friendList: [],
+            selectedFriendIds: [],
+            availableSlots: [],
+            loadingSlots: false,
+            selectedSlot: null,
+            showManualTime: false,
 
             get totalScore() {
                 return this.scores.slice(0, this.holes).reduce((a, b) => a + (b || 0), 0);
@@ -204,20 +280,113 @@ get_header();
 
             initScores() {
                 this.scores = Array(this.holes).fill(null);
+                if (!this.isRetrospective) this.refreshSlots();
             },
 
             init() {
                 fetch('/wp-json/wp/v2/course?per_page=100')
                     .then(res => res.json())
                     .then(data => this.courses = data);
+
+                fetch('/wp-json/teedup/v1/friends/list', {
+                    headers: { 'X-WP-Nonce': '<?php echo wp_create_nonce('wp_rest'); ?>' }
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        this.friendList = data.friends || [];
+                        
+                        // Auto-fill from existing round if provided
+                        if (this.existingRoundId) {
+                            fetch(`/wp-json/wp/v2/round/${this.existingRoundId}`, {
+                                headers: { 'X-WP-Nonce': '<?php echo wp_create_nonce('wp_rest'); ?>' }
+                            })
+                            .then(res => res.json())
+                            .then(data => {
+                                if (data.id) {
+                                    this.selectedCourseId = data.acf.course;
+                                    this.holes = parseInt(data.acf.holes_played) || 18;
+                                    this.selectedDate = data.acf.date;
+                                    this.loadCourseDetails();
+                                }
+                            });
+                        }
+
+                        // Handle pre-selection from Quick Book
+                        const params = new URLSearchParams(window.location.search);
+                        const partnerId = params.get('partner');
+                        const intent = params.get('intent');
+                        
+                        if (partnerId) {
+                            this.selectedFriendIds = [parseInt(partnerId)];
+                        }
+                        if (intent === 'book') {
+                            this.isRetrospective = false;
+                        } else if (intent === 'log') {
+                            this.isRetrospective = true;
+                        }
+                    });
+            },
+
+            refreshSlots() {
+                if (this.isRetrospective) return;
+                this.loadingSlots = true;
+                this.selectedSlot = null;
+
+                const duration = this.holes === 18 ? 300 : 150; // 5h vs 2.5h
+                
+                fetch('/wp-json/teedup/v1/availability/check', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': '<?php echo wp_create_nonce('wp_rest'); ?>'
+                    },
+                    body: JSON.stringify({
+                        user_ids: this.selectedFriendIds,
+                        duration_mins: duration
+                    })
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        this.availableSlots = data.options || [];
+                        this.loadingSlots = false;
+                    });
+            },
+
+            selectSlot(slot) {
+                this.selectedSlot = slot;
+                // Convert Next [Day] to actual date
+                const today = new Date();
+                const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                const targetDay = days.indexOf(slot.day);
+                let currentDay = today.getDay();
+                let daysUntil = (targetDay + 7 - currentDay) % 7;
+                if (daysUntil === 0) daysUntil = 7; // Next occurrence
+                
+                const targetDate = new Date(today);
+                targetDate.setDate(today.getDate() + daysUntil);
+                
+                // Format: YYYY-MM-DDTHH:MM
+                this.selectedDate = targetDate.toISOString().slice(0, 10) + 'T' + slot.time;
+            },
+
+            getNearestDateForSlot(slot) {
+                const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const targetDay = days.indexOf(slot.day);
+                const now = new Date();
+                const result = new Date();
+                result.setHours(parseInt(slot.time.split(':')[0]), parseInt(slot.time.split(':')[1]), 0, 0);
+                
+                let dayDiff = targetDay - now.getDay();
+                if (dayDiff < 0) dayDiff += 7;
+                result.setDate(now.getDate() + dayDiff);
+                
+                return result.toISOString().slice(0, 16);
             },
 
             loadCourseDetails() {
                 const course = this.courses.find(c => c.id == this.selectedCourseId);
                 if (course) {
                     this.selectedCourseName = course.title.rendered;
-                    // Load pars from ACF (if available via REST)
-                    // For now, default to par 4s
                     this.coursePars = Array(18).fill(4);
                     this.courseTotalPar = 72;
                 }
@@ -245,11 +414,13 @@ get_header();
                 this.submitting = true;
 
                 const payload = {
+                    round_id: this.existingRoundId,
                     course_id: parseInt(this.selectedCourseId),
                     date: this.selectedDate,
                     holes_played: this.holes,
                     scores: this.scores.slice(0, this.holes),
-                    is_practice: this.isPractice
+                    is_practice: this.isPractice,
+                    partners: this.selectedFriendIds
                 };
 
                 fetch('/wp-json/teedup/v1/submit-round', {
@@ -267,12 +438,42 @@ get_header();
                             this.newHandicap = data.handicap;
                             this.step = 4;
                         } else {
-                            alert(data.message || 'Error saving round. Please try again.');
+                            alert(data.message || 'Error saving round.');
                         }
-                    })
-                    .catch(err => {
+                    });
+            },
+
+            submitBooking() {
+                if (!this.selectedDate && !this.selectedSlot) {
+                    alert('Please select a time.');
+                    return;
+                }
+                this.submitting = true;
+
+                const payload = {
+                    course_id: parseInt(this.selectedCourseId),
+                    date: this.selectedDate,
+                    holes_played: this.holes,
+                    invited_friends: this.selectedFriendIds
+                };
+
+                fetch('/wp-json/teedup/v1/booking/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': '<?php echo wp_create_nonce('wp_rest'); ?>'
+                    },
+                    body: JSON.stringify(payload)
+                })
+                    .then(res => res.json())
+                    .then(data => {
                         this.submitting = false;
-                        alert('Network error. Please try again.');
+                        if (data.success) {
+                            alert('Booking request sent!');
+                            window.location.href = '<?php echo site_url('/dashboard'); ?>';
+                        } else {
+                            alert(data.message || 'Error creating booking.');
+                        }
                     });
             }
         }
@@ -297,6 +498,60 @@ get_header();
         background: var(--primary);
         border-radius: 3px;
         transition: width 0.3s;
+    }
+
+    /* Mode Action Cards (Scoped) */
+    .mode-cards-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .mode-action-card {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        padding: 1.5rem;
+        text-align: left;
+        width: 100%;
+        background: white;
+        border: 1px solid rgba(0,0,0,0.05);
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .mode-action-card:hover {
+        border-color: var(--primary);
+        background: #f0fdf4;
+    }
+
+    .mode-card-icon {
+        font-size: 2.5rem;
+        width: 64px;
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f8fafc;
+        border-radius: 16px;
+        transition: transform 0.3s;
+    }
+
+    .mode-action-card:hover .mode-card-icon {
+        transform: scale(1.1);
+        background: white;
+    }
+
+    .card-detail h3 {
+        margin: 0 0 0.25rem;
+        font-weight: 800;
+        color: #1e293b;
+    }
+
+    .card-detail p {
+        margin: 0;
+        color: #64748b;
+        font-size: 0.9rem;
     }
 
     .hole-selection {
@@ -459,9 +714,109 @@ get_header();
         cursor: pointer;
     }
 
-    .checkbox-label input {
-        width: 20px;
-        height: 20px;
+    /* Coordinator Styles */
+    .friends-mini-selection {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 0.5rem;
+    }
+
+    .friend-chip {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 0.8rem;
+        background: white;
+        border: 1px solid #eee;
+        border-radius: 50px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .friend-chip.active {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+
+    .friend-chip input {
+        display: none;
+    }
+
+    .chip-avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .slot-picker-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 0.75rem;
+        max-height: 300px;
+        overflow-y: auto;
+        padding: 0.5rem;
+        background: rgba(0,0,0,0.02);
+        border-radius: 12px;
+    }
+
+    .slot-btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 0.75rem;
+        background: white;
+        border: 1px solid #eee;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .slot-btn:hover {
+        border-color: var(--primary);
+        background: #f0fdf4;
+    }
+
+    .slot-btn.active {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+
+    .slot-day {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        font-weight: 700;
+        opacity: 0.8;
+    }
+
+    .slot-time {
+        font-size: 1.1rem;
+        font-weight: 800;
+    }
+
+    .spinner {
+        width: 30px;
+        height: 30px;
+        border: 3px solid #eee;
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .selected-time-summary {
+        background: #e8f5e9;
+        color: #2e7d32;
+        border: 1px solid #a5d6a7;
+        text-align: center;
+        border-radius: 12px;
     }
 </style>
 
