@@ -107,7 +107,7 @@ echo $users['total_users'];
             <div class="feature-card glass-card slide-up" style="animation-delay: 0.5s;">
                 <div class="feature-icon">📱</div>
                 <h3>Mobile Ready</h3>
-                <p>Log rounds on the go, right from the clubhouse. Works perfectly on any device.</p>
+                <p>Tee off on the go, right from the clubhouse. Works perfectly on any device.</p>
             </div>
         </div>
     </section>

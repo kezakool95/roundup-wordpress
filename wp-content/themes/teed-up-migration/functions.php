@@ -143,12 +143,28 @@ function teed_up_register_rest_routes()
     }
     ]);
 
+    register_rest_route('teedup/v1', '/availability/mutual', [
+        'methods' => 'GET',
+        'callback' => 'teed_up_get_mutual_availability',
+        'permission_callback' => function () {
+            return is_user_logged_in();
+        }
+    ]);
+
     register_rest_route('teedup/v1', '/subscription/update', [
         'methods' => 'POST',
         'callback' => 'teed_up_update_subscription',
         'permission_callback' => function () {
         return is_user_logged_in();
     }
+    ]);
+
+    register_rest_route('teedup/v1', '/availability/group-week', [
+        'methods' => 'GET',
+        'callback' => 'teed_up_get_group_availability',
+        'permission_callback' => function () {
+            return is_user_logged_in();
+        }
     ]);
 
     register_rest_route('teedup/v1', '/friends/history', [
@@ -677,9 +693,41 @@ function teed_up_check_availability($request)
         $user_ids[] = $current_user_id;
     }
 
+    $target_date = !empty($params['date']) ? date('Y-m-d', strtotime($params['date'])) : null;
+    $target_day = $target_date ? date('D', strtotime($target_date)) : null;
+
     $all_availability = [];
     foreach ($user_ids as $uid) {
-        $all_availability[$uid] = get_field('weekly_schedule', 'user_' . $uid) ?: [];
+        $weekly = get_field('weekly_schedule', 'user_' . $uid) ?: [];
+        $overrides = get_field('date_overrides', 'user_' . $uid) ?: [];
+        
+        $final_for_user = [];
+        $has_override = false;
+
+        if ($target_date) {
+            foreach ($overrides as $override) {
+                if ($override['date'] === $target_date) {
+                    $final_for_user = $override['slots'] ?: [];
+                    $has_override = true;
+                    break;
+                }
+            }
+        }
+
+        if (!$has_override) {
+            // Filter weekly schedule for the relevant day if a date was provided
+            if ($target_day) {
+                foreach ($weekly as $slot) {
+                    if ($slot['day'] === $target_day) {
+                        $final_for_user[] = $slot;
+                    }
+                }
+            } else {
+                $final_for_user = $weekly;
+            }
+        }
+
+        $all_availability[$uid] = $final_for_user;
     }
 
     $matching_slots = [];
@@ -761,20 +809,43 @@ function teed_up_save_availability($request)
     $params = $request->get_json_params();
     $new_schedule = $params['schedule'] ?? [];
 
-    // Map to ACF repeater format
-    $acf_value = [];
+    $target_date = !empty($params['date']) ? sanitize_text_field($params['date']) : null;
+
+    // Map to normalized format
+    $slots = [];
     foreach ($new_schedule as $slot) {
         $start = !empty($slot['start_time']) ? date('H:i', strtotime($slot['start_time'])) : '';
         $end = !empty($slot['end_time']) ? date('H:i', strtotime($slot['end_time'])) : '';
         
-        $acf_value[] = [
-            'day' => sanitize_text_field($slot['day']),
+        $slots[] = [
+            'day' => sanitize_text_field($slot['day'] ?? ''),
             'start_time' => $start,
             'end_time' => $end
         ];
     }
 
-    update_field('weekly_schedule', $acf_value, 'user_' . $user_id);
+    if ($target_date) {
+        // Update date-specific override
+        $overrides = get_field('date_overrides', 'user_' . $user_id) ?: [];
+        $found = false;
+        foreach ($overrides as &$override) {
+            if ($override['date'] === $target_date) {
+                $override['slots'] = $slots;
+                $found = true;
+                break;
+            }
+        }
+        if (!$found) {
+            $overrides[] = [
+                'date' => $target_date,
+                'slots' => $slots
+            ];
+        }
+        update_field('date_overrides', $overrides, 'user_' . $user_id);
+    } else {
+        // Update weekly schedule
+        update_field('weekly_schedule', $slots, 'user_' . $user_id);
+    }
 
     return ['success' => true, 'message' => 'Schedule saved successfully!'];
 }
@@ -822,6 +893,133 @@ function teed_up_get_friends_availability()
     }
 
     return ['friends' => $results];
+}
+
+/**
+ * REST API: Get mutual availability with friends for the next 7 days
+ */
+function teed_up_get_mutual_availability($request) {
+    $user_id = get_current_user_id();
+    $friends = get_user_meta($user_id, 'friends_list', true) ?: [];
+    
+    if (empty($friends)) {
+        return new WP_REST_Response(['openings' => []], 200);
+    }
+
+    $openings = [];
+    $today = new DateTime();
+    
+    // Check next 28 days (4 weeks)
+    for ($i = 0; $i < 28; $i++) {
+        $date = clone $today;
+        if ($i > 0) $date->modify("+$i day");
+        $date_str = $date->format('Y-m-d');
+        $day_name = $date->format('D');
+
+        // 1. Get user availability for this date
+        $user_slots = teed_up_get_user_slots_for_date($user_id, $date_str, $day_name);
+        if (empty($user_slots)) continue;
+
+        // 2. Check each friend's availability
+        foreach ($friends as $fid) {
+            $friend_slots = teed_up_get_user_slots_for_date($fid, $date_str, $day_name);
+            if (empty($friend_slots)) continue;
+
+            // 3. Find overlaps
+            foreach ($user_slots as $u_slot) {
+                foreach ($friend_slots as $f_slot) {
+                    $overlap_start = max($u_slot['start_time'], $f_slot['start_time']);
+                    $overlap_end = min($u_slot['end_time'], $f_slot['end_time']);
+
+                    if ($overlap_start < $overlap_end) {
+                        // We found an overlap!
+                        $openings[] = [
+                            'date' => $date_str,
+                            'day' => $day_name,
+                            'start_time' => $overlap_start,
+                            'end_time' => $overlap_end,
+                            'friend_id' => $fid,
+                            'friend_name' => get_userdata($fid)->display_name,
+                            'friend_avatar' => get_avatar_url($fid)
+                        ];
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort by date and time
+    usort($openings, function($a, $b) {
+        if ($a['date'] !== $b['date']) return strcmp($a['date'], $b['date']);
+        return strcmp($a['start_time'], $b['start_time']);
+    });
+
+    // Take top 30 unique time/date slots
+    return new WP_REST_Response(['openings' => array_slice($openings, 0, 30)], 200);
+}
+
+/**
+ * Helper to get user slots (recurring or override) for a specific date
+ */
+function teed_up_get_user_slots_for_date($uid, $date_str, $day_name) {
+    $overrides = get_field('date_overrides', 'user_' . $uid) ?: [];
+    foreach ($overrides as $override) {
+        if ($override['date'] === $date_str) {
+            return $override['slots'] ?: [];
+        }
+    }
+    
+    $weekly = get_field('weekly_schedule', 'user_' . $uid) ?: [];
+    $filtered = [];
+    foreach ($weekly as $slot) {
+        if ($slot['day'] === $day_name) {
+            $filtered[] = $slot;
+        }
+    }
+    return $filtered;
+}
+
+/**
+ * REST API: Get availability for user + all friends for a specific week
+ */
+function teed_up_get_group_availability($request) {
+    $params = $request->get_query_params();
+    $start_date_str = !empty($params['start_date']) ? sanitize_text_field($params['start_date']) : date('Y-m-d');
+    
+    $user_id = get_current_user_id();
+    $friends = get_user_meta($user_id, 'friends_list', true) ?: [];
+    $all_user_ids = array_merge([$user_id], $friends);
+    
+    $start_date = new DateTime($start_date_str);
+    $week_data = [];
+
+    for ($i = 0; $i < 7; $i++) {
+        $date = clone $start_date;
+        if ($i > 0) $date->modify("+$i day");
+        $date_str = $date->format('Y-m-d');
+        $day_name = $date->format('D');
+
+        $day_availability = [];
+        foreach ($all_user_ids as $uid) {
+            $slots = teed_up_get_user_slots_for_date($uid, $date_str, $day_name);
+            if (!empty($slots)) {
+                $day_availability[] = [
+                    'user_id' => $uid,
+                    'user_name' => get_userdata($uid)->display_name,
+                    'avatar' => get_avatar_url($uid),
+                    'slots' => $slots
+                ];
+            }
+        }
+
+        $week_data[] = [
+            'date' => $date_str,
+            'day' => $day_name,
+            'users' => $day_availability
+        ];
+    }
+
+    return new WP_REST_Response(['week' => $week_data], 200);
 }
 
 // Register Menus
@@ -1064,6 +1262,61 @@ if (function_exists('acf_add_local_field_group')):
         'location' => array(
                 array(
                     array(
+                    'param' => 'user_form',
+                    'operator' => '==',
+                    'value' => 'all',
+                ),
+            ),
+        ),
+    ));
+
+    // Date-Specific Availability Overrides
+    acf_add_local_field_group(array(
+        'key' => 'group_date_specific_availability',
+        'title' => 'Date-Specific Availability',
+        'fields' => array(
+            array(
+                'key' => 'field_date_overrides',
+                'label' => 'Date Overrides',
+                'name' => 'date_overrides',
+                'type' => 'repeater',
+                'button_label' => 'Add Date Override',
+                'sub_fields' => array(
+                    array(
+                        'key' => 'field_override_date',
+                        'label' => 'Date',
+                        'name' => 'date',
+                        'type' => 'date_picker',
+                        'display_format' => 'Y-m-d',
+                        'return_format' => 'Y-m-d',
+                    ),
+                    array(
+                        'key' => 'field_override_slots',
+                        'label' => 'Available Slots',
+                        'name' => 'slots',
+                        'type' => 'repeater',
+                        'button_label' => 'Add Slot',
+                        'sub_fields' => array(
+                            array(
+                                'key' => 'field_override_start',
+                                'label' => 'Start Time',
+                                'name' => 'start_time',
+                                'type' => 'time_picker',
+                            ),
+                            array(
+                                'key' => 'field_override_end',
+                                'label' => 'End Time',
+                                'name' => 'end_time',
+                                'type' => 'time_picker',
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        'location' => array(
+            array(
+                array(
                     'param' => 'user_form',
                     'operator' => '==',
                     'value' => 'all',
@@ -1324,7 +1577,7 @@ function teed_up_create_pages()
             'template' => 'page-dashboard.php'
         ],
         [
-            'title' => 'Log Round',
+            'title' => 'Tee Off',
             'slug' => 'log-round',
             'template' => 'page-round-creator.php'
         ],
