@@ -32,7 +32,7 @@
                     ]);
                 ?>
                     <div class="header-actions">
-                        <a href="<?php echo site_url('/log-round'); ?>" class="btn-primary small">Log Round</a>
+                        <a href="<?php echo site_url('/log-round'); ?>" class="btn-primary small">Tee Off</a>
                         <div class="user-menu" x-data="{ open: false }" @click.away="open = false">
                             <button @click="open = !open" class="user-menu-trigger">
                                 <?php echo get_avatar($current_user->ID, 32); ?>
@@ -73,7 +73,7 @@
                     ]);
                 ?>
                 <div class="mobile-actions mt-1">
-                    <a href="<?php echo site_url('/log-round'); ?>" class="btn-primary full-width mb-1">Log Round</a>
+                    <a href="<?php echo site_url('/log-round'); ?>" class="btn-primary full-width mb-1">Tee Off</a>
                 </div>
                 <a href="<?php echo site_url('/dashboard'); ?>" class="mobile-link">Dashboard</a>
                 <a href="<?php echo site_url('/stats'); ?>" class="mobile-link">My Stats</a>

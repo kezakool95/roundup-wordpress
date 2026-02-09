@@ -49,12 +49,40 @@ endif; ?>
                 </strong> handicap.</p>
         </div>
 
+        <!-- Common Openings -->
+        <div class="mt-2 mb-4 slide-up">
+            <h2 class="premium-heading mb-1">Common Openings</h2>
+            
+            <template x-if="openings.length > 0">
+                <div class="openings-scroll">
+                    <template x-for="opening in openings" :key="opening.date + opening.start_time + opening.friend_id">
+                        <a :href="'<?php echo site_url('/log-round'); ?>?date=' + opening.date + 'T' + opening.start_time + '&friend_id=' + opening.friend_id" class="opening-card glass-card">
+                            <div class="opening-date" x-text="formatOpeningDate(opening.date, opening.day)"></div>
+                            <div class="opening-time" x-text="opening.start_time"></div>
+                            <div class="opening-friend">
+                                <img :src="opening.friend_avatar" class="mini-avatar-opening" :title="opening.friend_name">
+                                <span x-text="opening.friend_name.split(' ')[0]"></span>
+                            </div>
+                        </a>
+                    </template>
+                </div>
+            </template>
+
+            <template x-if="openings.length === 0">
+                <div class="glass-card p-2 text-center">
+                    <div class="empty-icon" style="font-size: 2rem; margin-bottom: 0.5rem;">📅</div>
+                    <p class="text-muted">No common openings found in the next 4 weeks.</p>
+                    <p class="small text-muted mt-0-5">Make sure you and your friends have updated your <a href="<?php echo site_url('/schedule'); ?>" class="text-link">Master Schedules</a>.</p>
+                </div>
+            </template>
+        </div>
+
         <!-- Quick Actions Grid -->
         <div class="quick-actions grid-2 mt-2">
-            <a href="<?php echo site_url('/log-round'); ?>" class="action-card glass-card slide-up"
+                <a href="<?php echo site_url('/log-round'); ?>" class="action-card glass-card slide-up"
                 style="animation-delay: 0.1s;">
                 <span class="icon">⛳️</span>
-                <h3>Log Round</h3>
+                <h3>Tee Off</h3>
                 <p>Record a new score or book a tee time.</p>
             </a>
 
@@ -176,7 +204,7 @@ if ($activities->have_posts()):
                 <?php
 else: ?>
                 <p class="text-muted text-center" style="padding: 2rem;">No recent activity. <a
-                        href="<?php echo site_url('/log-round'); ?>">Get started now!</a></p>
+                        href="<?php echo site_url('/log-round'); ?>">Tee off now!</a></p>
                 <?php
 endif; ?>
             </div>
@@ -419,6 +447,7 @@ endif; ?>
             
             init() {
                 this.loadBookings();
+                this.loadOpenings();
             },
 
             loadBookings() {
@@ -429,6 +458,32 @@ endif; ?>
                 .then(data => {
                     this.bookings = data;
                 });
+            },
+
+            openings: [],
+            loadOpenings() {
+                fetch('/wp-json/teedup/v1/availability/mutual', {
+                    headers: { 'X-WP-Nonce': '<?php echo wp_create_nonce('wp_rest'); ?>' }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    this.openings = data.openings;
+                });
+            },
+
+            formatOpeningDate(dateStr, day) {
+                const parts = dateStr.split('-');
+                const d = new Date(parts[0], parts[1] - 1, parts[2]);
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                d.setHours(0,0,0,0);
+                
+                if (d.getTime() === today.getTime()) return 'Today';
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                if (d.getTime() === tomorrow.getTime()) return 'Tomorrow';
+                
+                return day + ', ' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
             },
 
             respondToBooking(roundId, response) {
@@ -798,6 +853,60 @@ endif; ?>
 
     .tier-icon {
         font-size: 2.5rem;
+        /* Common Openings Styles */
+    }
+    .openings-scroll {
+        display: flex;
+        gap: 1rem;
+        overflow-x: auto;
+        padding: 0.5rem 0.5rem 1.5rem;
+        margin: 0 -0.5rem;
+        scrollbar-width: none;
+    }
+    .openings-scroll::-webkit-scrollbar { display: none; }
+
+    .opening-card {
+        flex: 0 0 160px;
+        padding: 1.25rem;
+        text-decoration: none;
+        color: inherit;
+        text-align: center;
+        transition: all 0.3s;
+        border: 1px solid rgba(0,0,0,0.05);
+        border-radius: 20px; /* Added missing border-radius */
+    }
+    .opening-card:hover {
+        transform: translateY(-4px);
+        border-color: var(--wp--preset--color--primary);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+    }
+
+    .opening-date {
+        font-weight: 800;
+        font-size: 0.75rem;
+        color: var(--wp--preset--color--primary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .opening-time { font-size: 1.25rem; font-weight: 900; margin: 0.25rem 0; color: #1e293b; }
+    .opening-friend {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        color: #64748b;
+        font-weight: 700;
+        margin-top: 0.5rem;
+    }
+
+    .mini-avatar-opening {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        object-fit: cover;
+        background: #eee;
+    }
         background: white;
         width: 70px;
         height: 70px;

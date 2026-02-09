@@ -78,7 +78,7 @@ get_header();
         <div class="empty-icon">🏌️</div>
         <h3 x-text="activeTab === 'friends' ? 'No friends with handicaps yet' : 'No rankings available'"></h3>
         <p class="text-muted"
-            x-text="activeTab === 'friends' ? 'Add some friends and log rounds together!' : 'Start logging rounds to appear on the leaderboard.'">
+            x-text="activeTab === 'friends' ? 'Add some friends and tee off together!' : 'Start teeing off to appear on the leaderboard.'">
         </p>
         <template x-if="activeTab === 'friends'">
             <a href="<?php echo site_url('/friends'); ?>" class="btn-primary mt-1">Find Friends</a>
